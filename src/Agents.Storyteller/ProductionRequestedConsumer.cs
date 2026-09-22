@@ -28,6 +28,8 @@ public sealed class ProductionRequestedConsumer(
             incoming.ProductionId,
             incoming.Payload.Prompt);
 
+        await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
+
         var manuscript = $"""
             # Production {incoming.ProductionId}
 

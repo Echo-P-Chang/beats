@@ -76,7 +76,7 @@ public sealed class MySqlProductionRepository(IOptions<DatabaseOptions> options)
         }
 
         return new ProductionRecord(
-            Guid.Parse(reader.GetString(0)),
+            GetGuid(reader, 0),
             reader.GetString(1),
             reader.IsDBNull(2) ? null : reader.GetString(2),
             reader.GetInt32(3),
@@ -266,6 +266,18 @@ public sealed class MySqlProductionRepository(IOptions<DatabaseOptions> options)
     private static void Add(MySqlCommand command, string name, object? value)
     {
         command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+    }
+
+    private static Guid GetGuid(MySqlDataReader reader, int ordinal)
+    {
+        var value = reader.GetValue(ordinal);
+
+        return value switch
+        {
+            Guid guid => guid,
+            string text => Guid.Parse(text),
+            _ => Guid.Parse(Convert.ToString(value) ?? throw new InvalidOperationException("Database value is null."))
+        };
     }
 
     private static DateTimeOffset ToDateTimeOffset(DateTime value)

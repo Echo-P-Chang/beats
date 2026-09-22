@@ -28,6 +28,8 @@ public sealed class SceneImagesCreatedConsumer(
             incoming.ProductionId,
             incoming.Payload.Images.Count);
 
+        await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
+
         var inputArtifact = incoming.Payload.Images[0].Artifact;
         var manuscript = await ArtifactText.ReadAsync(
             artifactStore,

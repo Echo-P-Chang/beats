@@ -615,8 +615,11 @@
     function statusToStepIndex(status) {
       const map = {
         Requested: 0,
+        ProductionRequested: 0,
         StoryCreated: 1,
+        ImagesCreated: 2,
         SceneImagesCreated: 2,
+        AnimationsCreated: 3,
         SceneAnimationsCreated: 3,
         FinalVideoCreated: 4,
         ReviewPassed: 5,

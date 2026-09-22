@@ -28,6 +28,8 @@ public sealed class SceneAnimationsCreatedConsumer(
             incoming.ProductionId,
             incoming.Payload.Animations.Count);
 
+        await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
+
         var inputArtifact = incoming.Payload.Animations[0].Artifact;
         var manuscript = await ArtifactText.ReadAsync(
             artifactStore,

@@ -28,6 +28,8 @@ public sealed class StoryCreatedConsumer(
             incoming.ProductionId,
             incoming.Payload.Scenes.Uri);
 
+        await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
+
         var manuscript = await ArtifactText.ReadAsync(
             artifactStore,
             incoming.Payload.Story.Uri,
