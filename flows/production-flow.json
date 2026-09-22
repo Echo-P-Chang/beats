@@ -1,0 +1,94 @@
+{
+  "agentFlows": [
+    {
+      "agentRole": "production-api",
+      "subscriptions": [],
+      "publications": [
+        {
+          "eventType": "ProductionRequested",
+          "payloadType": "ProductionRequestedPayload"
+        }
+      ]
+    },
+    {
+      "agentRole": "storyteller-agent",
+      "subscriptions": [
+        {
+          "eventType": "ProductionRequested",
+          "payloadType": "ProductionRequestedPayload"
+        }
+      ],
+      "publications": [
+        {
+          "eventType": "StoryCreated",
+          "payloadType": "StoryCreatedPayload",
+          "afterEventType": "ProductionRequested"
+        }
+      ]
+    },
+    {
+      "agentRole": "illustrator-agent",
+      "subscriptions": [
+        {
+          "eventType": "StoryCreated",
+          "payloadType": "StoryCreatedPayload"
+        }
+      ],
+      "publications": [
+        {
+          "eventType": "SceneImagesCreated",
+          "payloadType": "SceneImagesCreatedPayload",
+          "afterEventType": "StoryCreated"
+        }
+      ]
+    },
+    {
+      "agentRole": "animator-agent",
+      "subscriptions": [
+        {
+          "eventType": "SceneImagesCreated",
+          "payloadType": "SceneImagesCreatedPayload"
+        }
+      ],
+      "publications": [
+        {
+          "eventType": "SceneAnimationsCreated",
+          "payloadType": "SceneAnimationsCreatedPayload",
+          "afterEventType": "SceneImagesCreated"
+        }
+      ]
+    },
+    {
+      "agentRole": "editor-agent",
+      "subscriptions": [
+        {
+          "eventType": "SceneAnimationsCreated",
+          "payloadType": "SceneAnimationsCreatedPayload"
+        }
+      ],
+      "publications": [
+        {
+          "eventType": "FinalVideoCreated",
+          "payloadType": "FinalVideoCreatedPayload",
+          "afterEventType": "SceneAnimationsCreated"
+        }
+      ]
+    },
+    {
+      "agentRole": "reviewer-agent",
+      "subscriptions": [
+        {
+          "eventType": "FinalVideoCreated",
+          "payloadType": "FinalVideoCreatedPayload"
+        }
+      ],
+      "publications": [
+        {
+          "eventType": "ReviewPassed",
+          "payloadType": "ReviewCompletedPayload",
+          "afterEventType": "FinalVideoCreated"
+        }
+      ]
+    }
+  ]
+}

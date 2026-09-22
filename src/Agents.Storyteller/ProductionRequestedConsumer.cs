@@ -1,6 +1,7 @@
 using Beats.Production.Contracts;
 using Beats.Production.Contracts.Events;
 using Beats.Production.Contracts.Events.Payloads;
+using Beats.Production.Flows;
 using Beats.Production.Contracts.Media;
 using Beats.Production.Contracts.Productions;
 using Beats.Production.Middleware.Artifacts;
@@ -13,6 +14,7 @@ namespace Beats.Agents.Storyteller;
 public sealed class ProductionRequestedConsumer(
     IArtifactStore artifactStore,
     IEventPublisher eventPublisher,
+    IProductionFlow productionFlow,
     IProductionRepository productionRepository,
     ILogger<ProductionRequestedConsumer> logger) : IConsumer<EventEnvelope<ProductionRequestedPayload>>
 {
@@ -58,8 +60,12 @@ public sealed class ProductionRequestedConsumer(
             manuscriptArtifact,
             manuscriptArtifact);
 
+        var publication = productionFlow.GetRequiredPublication<StoryCreatedPayload>(
+            AgentRoles.Storyteller,
+            incoming.EventType);
+
         var outgoing = EventEnvelope<StoryCreatedPayload>.Create(
-            EventTypes.StoryCreated,
+            publication.EventType,
             incoming.ProductionId,
             AgentRoles.Storyteller,
             payload,

@@ -298,17 +298,33 @@ docker compose down -v
 docker compose up -d --build
 ```
 
+### Flow Config
+
+choreography 流程定義在：
+
+```text
+flows/production-flow.json
+```
+
+這個檔案會 mount 到每個 .NET service 的 `/app/flows`。如果只調整 agent 訂閱/發布的 flow config，不需要重新編譯；修改後 restart 相關服務即可：
+
+```bash
+docker compose restart production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
+```
+
 ### 專案結構
 
 ```text
+flows/production-flow.json  choreography 設定檔
 src/Production.Api          建立與查詢 productions 的 API / UI
 src/Production.Contracts    共用 events、payloads、contracts
+src/Production.Flows        choreography 流程規則，定義 agent 訂閱與發布拓樸
 src/Production.Middleware   共用 event bus、artifact、persistence adapters
-src/Agents.Storyteller      consumes ProductionRequested, publishes StoryCreated
-src/Agents.Illustrator      consumes StoryCreated, publishes SceneImagesCreated
-src/Agents.Animator         consumes SceneImagesCreated, publishes SceneAnimationsCreated
-src/Agents.Editor           consumes SceneAnimationsCreated, publishes FinalVideoCreated
-src/Agents.Reviewer         consumes FinalVideoCreated, publishes ReviewPassed
+src/Agents.Storyteller      說書人能力實作，訂閱/發布由 Production.Flows 載入
+src/Agents.Illustrator      繪圖師能力實作，訂閱/發布由 Production.Flows 載入
+src/Agents.Animator         動畫師能力實作，訂閱/發布由 Production.Flows 載入
+src/Agents.Editor           剪輯師能力實作，訂閱/發布由 Production.Flows 載入
+src/Agents.Reviewer         審查者能力實作，訂閱/發布由 Production.Flows 載入
 sql/                        database schema
 docs/                       額外本機操作文件
 ```
@@ -617,17 +633,33 @@ Rebuild after code changes:
 docker compose up -d --build
 ```
 
+### Flow Config
+
+The choreography flow is defined in:
+
+```text
+flows/production-flow.json
+```
+
+This file is mounted into every .NET service at `/app/flows`. If you only change agent subscriptions/publications in the flow config, you do not need to rebuild; restart the related services instead:
+
+```bash
+docker compose restart production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
+```
+
 ### Project Layout
 
 ```text
+flows/production-flow.json  Choreography configuration file
 src/Production.Api          API and UI for starting and checking productions
 src/Production.Contracts    Shared events, payloads, and contracts
+src/Production.Flows        Choreography rules for agent subscriptions and publications
 src/Production.Middleware   Shared event bus, artifact, and persistence adapters
-src/Agents.Storyteller      Consumes ProductionRequested, publishes StoryCreated
-src/Agents.Illustrator      Consumes StoryCreated, publishes SceneImagesCreated
-src/Agents.Animator         Consumes SceneImagesCreated, publishes SceneAnimationsCreated
-src/Agents.Editor           Consumes SceneAnimationsCreated, publishes FinalVideoCreated
-src/Agents.Reviewer         Consumes FinalVideoCreated, publishes ReviewPassed
+src/Agents.Storyteller      Storyteller capability; subscriptions/publications are loaded from Production.Flows
+src/Agents.Illustrator      Illustrator capability; subscriptions/publications are loaded from Production.Flows
+src/Agents.Animator         Animator capability; subscriptions/publications are loaded from Production.Flows
+src/Agents.Editor           Editor capability; subscriptions/publications are loaded from Production.Flows
+src/Agents.Reviewer         Reviewer capability; subscriptions/publications are loaded from Production.Flows
 sql/                        Database schema
 docs/                       Extra local operation notes
 ```

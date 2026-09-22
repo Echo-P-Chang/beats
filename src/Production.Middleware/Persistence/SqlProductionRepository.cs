@@ -87,6 +87,41 @@ public sealed class SqlProductionRepository(IOptions<DatabaseOptions> options) :
             reader.GetDateTimeOffset(7));
     }
 
+    public async Task<IReadOnlyList<ProductionEventRecord>> GetProductionEventsAsync(
+        Guid productionId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT EventId, ProductionId, EventType, CorrelationId, CausationId, Producer, SchemaVersion, CreatedAt
+            FROM dbo.ProductionEvents
+            WHERE ProductionId = @ProductionId
+            ORDER BY CreatedAt, EventId;
+            """;
+
+        Add(command, "@ProductionId", SqlDbType.UniqueIdentifier, productionId);
+
+        var records = new List<ProductionEventRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            records.Add(new ProductionEventRecord(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                reader.GetString(2),
+                reader.GetGuid(3),
+                reader.IsDBNull(4) ? null : reader.GetGuid(4),
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.GetDateTimeOffset(7)));
+        }
+
+        return records;
+    }
+
     public async Task UpdateProductionStatusAsync(
         Guid productionId,
         string status,

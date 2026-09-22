@@ -19,6 +19,9 @@ x-dotnet-service: &dotnet-service
     AzureStorage__ContainerName: artifacts
     AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=${AZURITE_ACCOUNT_KEY:-Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==};BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
     Database__Provider: MySql
+    ProductionFlows__ConfigPath: flows/production-flow.json
+  volumes:
+    - ./flows:/app/flows:ro
 
 services:
   rabbitmq:

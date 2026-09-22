@@ -1,6 +1,7 @@
 using Beats.Production.Contracts;
 using Beats.Production.Contracts.Events;
 using Beats.Production.Contracts.Events.Payloads;
+using Beats.Production.Flows;
 using Beats.Production.Contracts.Media;
 using Beats.Production.Contracts.Productions;
 using Beats.Production.Middleware.Artifacts;
@@ -13,6 +14,7 @@ namespace Beats.Agents.Reviewer;
 public sealed class FinalVideoCreatedConsumer(
     IArtifactStore artifactStore,
     IEventPublisher eventPublisher,
+    IProductionFlow productionFlow,
     IProductionRepository productionRepository,
     ILogger<FinalVideoCreatedConsumer> logger) : IConsumer<EventEnvelope<FinalVideoCreatedPayload>>
 {
@@ -69,8 +71,12 @@ public sealed class FinalVideoCreatedConsumer(
             artifact,
             ["Stub review passed. Full quality checks will be implemented later."]);
 
+        var publication = productionFlow.GetRequiredPublication<ReviewCompletedPayload>(
+            AgentRoles.Reviewer,
+            incoming.EventType);
+
         var outgoing = EventEnvelope<ReviewCompletedPayload>.Create(
-            EventTypes.ReviewPassed,
+            publication.EventType,
             incoming.ProductionId,
             AgentRoles.Reviewer,
             payload,

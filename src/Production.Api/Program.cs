@@ -1,6 +1,8 @@
 using Beats.Production.Contracts;
 using Beats.Production.Contracts.Events;
 using Beats.Production.Contracts.Events.Payloads;
+using Beats.Production.Flows;
+using Beats.Production.Flows.DependencyInjection;
 using Beats.Production.Contracts.Productions;
 using Beats.Production.Middleware.Configuration;
 using Beats.Production.Middleware.DependencyInjection;
@@ -16,6 +18,7 @@ builder.Services.AddProductionMiddleware(options =>
     options.RootPath = Path.GetFullPath(
         Path.Combine(builder.Environment.ContentRootPath, "..", "..", "artifacts"));
 });
+builder.Services.AddProductionFlows(builder.Configuration);
 builder.Services.AddAzureBlobArtifacts(builder.Configuration);
 builder.Services.AddProductionDatabase(builder.Configuration);
 builder.Services.AddRabbitMqMessaging(builder.Configuration);
@@ -31,9 +34,19 @@ app.MapGet("/health", () => Results.Ok(new
     status = "ready"
 }));
 
+app.MapGet("/production-flow", (IConfiguration configuration) =>
+{
+    var path = ResolveProductionFlowPath(
+        configuration["ProductionFlows:ConfigPath"] ?? "flows/production-flow.json");
+
+    return Results.Text(File.ReadAllText(path), "application/json");
+})
+.WithName("GetProductionFlow");
+
 app.MapPost("/productions", async (
     StartProductionRequest request,
     IEventPublisher eventPublisher,
+    IProductionFlow productionFlow,
     IProductionRepository productionRepository,
     CancellationToken cancellationToken) =>
 {
@@ -49,8 +62,11 @@ app.MapPost("/productions", async (
         request.TargetWordCount,
         request.DurationSeconds);
 
+    var publication = productionFlow.GetRequiredPublication<ProductionRequestedPayload>(
+        AgentRoles.ProductionApi);
+
     var message = EventEnvelope<ProductionRequestedPayload>.Create(
-        EventTypes.ProductionRequested,
+        publication.EventType,
         productionId,
         AgentRoles.ProductionApi,
         payload);
@@ -99,4 +115,70 @@ app.MapGet("/productions/{productionId:guid}", async (
 })
 .WithName("GetProduction");
 
+app.MapGet("/productions/{productionId:guid}/events", async (
+    Guid productionId,
+    IProductionRepository productionRepository,
+    CancellationToken cancellationToken) =>
+{
+    var production = await productionRepository.GetProductionAsync(productionId, cancellationToken);
+
+    if (production is null)
+    {
+        return Results.NotFound();
+    }
+
+    var events = await productionRepository.GetProductionEventsAsync(productionId, cancellationToken);
+
+    return Results.Ok(events.Select(productionEvent => new
+    {
+        productionEvent.EventId,
+        productionEvent.ProductionId,
+        productionEvent.EventType,
+        productionEvent.CorrelationId,
+        productionEvent.CausationId,
+        productionEvent.Producer,
+        productionEvent.SchemaVersion,
+        productionEvent.CreatedAt
+    }));
+})
+.WithName("GetProductionEvents");
+
 app.Run();
+
+static string ResolveProductionFlowPath(string configuredPath)
+{
+    if (Path.IsPathRooted(configuredPath) && File.Exists(configuredPath))
+    {
+        return configuredPath;
+    }
+
+    foreach (var root in CandidateRoots())
+    {
+        var candidate = Path.GetFullPath(Path.Combine(root, configuredPath));
+        if (File.Exists(candidate))
+        {
+            return candidate;
+        }
+    }
+
+    throw new FileNotFoundException($"Flow config file '{configuredPath}' was not found.");
+}
+
+static IEnumerable<string> CandidateRoots()
+{
+    var roots = new[]
+    {
+        Directory.GetCurrentDirectory(),
+        AppContext.BaseDirectory
+    };
+
+    foreach (var root in roots)
+    {
+        var current = new DirectoryInfo(root);
+        while (current is not null)
+        {
+            yield return current.FullName;
+            current = current.Parent;
+        }
+    }
+}

@@ -1,6 +1,7 @@
 using Beats.Production.Contracts;
 using Beats.Production.Contracts.Events;
 using Beats.Production.Contracts.Events.Payloads;
+using Beats.Production.Flows;
 using Beats.Production.Contracts.Media;
 using Beats.Production.Contracts.Productions;
 using Beats.Production.Middleware.Artifacts;
@@ -13,6 +14,7 @@ namespace Beats.Agents.Animator;
 public sealed class SceneImagesCreatedConsumer(
     IArtifactStore artifactStore,
     IEventPublisher eventPublisher,
+    IProductionFlow productionFlow,
     IProductionRepository productionRepository,
     ILogger<SceneImagesCreatedConsumer> logger) : IConsumer<EventEnvelope<SceneImagesCreatedPayload>>
 {
@@ -67,8 +69,12 @@ public sealed class SceneImagesCreatedConsumer(
                 1)
         ]);
 
+        var publication = productionFlow.GetRequiredPublication<SceneAnimationsCreatedPayload>(
+            AgentRoles.Animator,
+            incoming.EventType);
+
         var outgoing = EventEnvelope<SceneAnimationsCreatedPayload>.Create(
-            EventTypes.SceneAnimationsCreated,
+            publication.EventType,
             incoming.ProductionId,
             AgentRoles.Animator,
             payload,

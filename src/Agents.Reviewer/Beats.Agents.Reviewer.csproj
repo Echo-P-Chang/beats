@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Production.Contracts\Beats.Production.Contracts.csproj" />
+    <ProjectReference Include="..\Production.Flows\Beats.Production.Flows.csproj" />
     <ProjectReference Include="..\Production.Middleware\Beats.Production.Middleware.csproj" />
   </ItemGroup>
 </Project>

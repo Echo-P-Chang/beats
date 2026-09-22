@@ -86,6 +86,41 @@ public sealed class MySqlProductionRepository(IOptions<DatabaseOptions> options)
             ToDateTimeOffset(reader.GetDateTime(7)));
     }
 
+    public async Task<IReadOnlyList<ProductionEventRecord>> GetProductionEventsAsync(
+        Guid productionId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT EventId, ProductionId, EventType, CorrelationId, CausationId, Producer, SchemaVersion, CreatedAt
+            FROM ProductionEvents
+            WHERE ProductionId = @ProductionId
+            ORDER BY CreatedAt, EventId;
+            """;
+
+        Add(command, "@ProductionId", productionId);
+
+        var records = new List<ProductionEventRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            records.Add(new ProductionEventRecord(
+                GetGuid(reader, 0),
+                GetGuid(reader, 1),
+                reader.GetString(2),
+                GetGuid(reader, 3),
+                reader.IsDBNull(4) ? null : GetGuid(reader, 4),
+                reader.GetString(5),
+                reader.GetString(6),
+                ToDateTimeOffset(reader.GetDateTime(7))));
+        }
+
+        return records;
+    }
+
     public async Task UpdateProductionStatusAsync(
         Guid productionId,
         string status,
