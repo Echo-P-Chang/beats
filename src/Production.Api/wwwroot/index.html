@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Beats Production Console</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --ink: #18212f;
+      --muted: #627086;
+      --line: #d9e0ea;
+      --accent: #0f766e;
+      --accent-strong: #115e59;
+      --accent-soft: #dff7f3;
+      --warn: #9a3412;
+      --ok: #166534;
+      --shadow: 0 12px 30px rgba(24, 33, 47, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 48px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mark {
+      display: grid;
+      width: 38px;
+      height: 38px;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 800;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.25rem, 2vw, 1.7rem);
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .link-button,
+    button {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      padding: 8px 12px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .primary:hover {
+      background: var(--accent-strong);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding: 16px 18px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.25;
+    }
+
+    form,
+    .panel-body {
+      padding: 18px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    textarea,
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      padding: 10px 12px;
+      outline: none;
+    }
+
+    textarea:focus,
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+    }
+
+    textarea {
+      min-height: 148px;
+      resize: vertical;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      border-radius: 999px;
+      background: #eef2f7;
+      color: var(--muted);
+      padding: 4px 10px;
+      font-size: 0.83rem;
+      font-weight: 700;
+    }
+
+    .status-pill.ok {
+      background: #dcfce7;
+      color: var(--ok);
+    }
+
+    .status-pill.warn {
+      background: #ffedd5;
+      color: var(--warn);
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      min-width: 0;
+      background: #fbfcfd;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .metric strong {
+      display: block;
+      overflow-wrap: anywhere;
+      font-size: 0.94rem;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      color: var(--muted);
+    }
+
+    .dot {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .step.done {
+      color: var(--ink);
+    }
+
+    .step.done .dot {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+
+    .step-title {
+      font-weight: 800;
+    }
+
+    .step-role {
+      margin-top: 2px;
+      font-size: 0.82rem;
+    }
+
+    .lookup {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .lookup input {
+      min-width: 0;
+    }
+
+    .message {
+      min-height: 22px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .error {
+      color: #b91c1c;
+      font-weight: 700;
+    }
+
+    .empty {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      padding: 18px;
+      text-align: center;
+    }
+
+    @media (max-width: 860px) {
+      .topbar,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar {
+        align-items: flex-start;
+      }
+
+      .links {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .shell {
+        width: min(100% - 20px, 1180px);
+        padding-top: 18px;
+      }
+
+      .grid-2,
+      .result-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .lookup {
+        flex-direction: column;
+      }
+
+      .link-button,
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="topbar" aria-labelledby="page-title">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">B</div>
+        <div>
+          <h1 id="page-title">Beats Production Console</h1>
+          <p class="subtitle">Choreography pipeline monitor</p>
+        </div>
+      </div>
+      <nav class="links" aria-label="Runtime links">
+        <a class="link-button" href="/health" target="_blank" rel="noreferrer">Health</a>
+        <a class="link-button" href="http://localhost:15672" target="_blank" rel="noreferrer">RabbitMQ</a>
+      </nav>
+    </section>
+
+    <section class="layout">
+      <section class="panel" aria-labelledby="create-title">
+        <div class="panel-header">
+          <h2 id="create-title">New Production</h2>
+          <span class="status-pill">API Ready</span>
+        </div>
+        <form id="production-form">
+          <div class="field">
+            <label for="prompt">Prompt</label>
+            <textarea id="prompt" name="prompt" required>請說一則800字的故事，並產出影片。</textarea>
+          </div>
+          <div class="field">
+            <label for="style">Style</label>
+            <input id="style" name="style" value="水彩繪本風" autocomplete="off">
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="targetWordCount">Target Words</label>
+              <input id="targetWordCount" name="targetWordCount" type="number" min="100" max="3000" step="50" value="800">
+            </div>
+            <div class="field">
+              <label for="durationSeconds">Duration Seconds</label>
+              <input id="durationSeconds" name="durationSeconds" type="number" min="10" max="600" step="5" value="90">
+            </div>
+          </div>
+          <div class="actions">
+            <button class="primary" type="submit" id="start-button">Start Production</button>
+            <button type="button" id="reset-button">Reset</button>
+          </div>
+          <p class="message" id="form-message" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="status-title">
+        <div class="panel-header">
+          <h2 id="status-title">Production Status</h2>
+          <span class="status-pill" id="status-pill">Idle</span>
+        </div>
+        <div class="panel-body">
+          <div id="status-content" class="empty">No production selected.</div>
+
+          <div class="lookup">
+            <input id="lookup-id" autocomplete="off" placeholder="production id">
+            <button type="button" id="lookup-button">Lookup</button>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const finalStatuses = new Set(["ReviewPassed", "ReviewFailed"]);
+    const steps = [
+      ["ProductionRequested", "Production API"],
+      ["StoryCreated", "Storyteller"],
+      ["SceneImagesCreated", "Illustrator"],
+      ["SceneAnimationsCreated", "Animator"],
+      ["FinalVideoCreated", "Editor"],
+      ["ReviewPassed", "Reviewer"]
+    ];
+
+    const form = document.querySelector("#production-form");
+    const startButton = document.querySelector("#start-button");
+    const resetButton = document.querySelector("#reset-button");
+    const formMessage = document.querySelector("#form-message");
+    const statusPill = document.querySelector("#status-pill");
+    const statusContent = document.querySelector("#status-content");
+    const lookupInput = document.querySelector("#lookup-id");
+    const lookupButton = document.querySelector("#lookup-button");
+
+    let pollHandle = 0;
+    let activeProductionId = "";
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setMessage("Starting production...");
+      startButton.disabled = true;
+
+      try {
+        const data = formData();
+        const response = await fetch("/productions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        const result = await response.json();
+        activeProductionId = result.productionId;
+        lookupInput.value = activeProductionId;
+        renderPending(result);
+        setMessage("Production requested.");
+        poll(activeProductionId);
+      } catch (error) {
+        setMessage(error.message || "Request failed.", true);
+      } finally {
+        startButton.disabled = false;
+      }
+    });
+
+    resetButton.addEventListener("click", () => {
+      form.reset();
+      clearInterval(pollHandle);
+      pollHandle = 0;
+      activeProductionId = "";
+      lookupInput.value = "";
+      statusPill.className = "status-pill";
+      statusPill.textContent = "Idle";
+      statusContent.className = "empty";
+      statusContent.textContent = "No production selected.";
+      setMessage("");
+    });
+
+    lookupButton.addEventListener("click", () => {
+      const id = lookupInput.value.trim();
+      if (!id) {
+        setMessage("Production id is required.", true);
+        return;
+      }
+
+      activeProductionId = id;
+      fetchStatus(id);
+    });
+
+    function formData() {
+      const targetWordCount = Number(document.querySelector("#targetWordCount").value || 800);
+      const durationValue = document.querySelector("#durationSeconds").value;
+
+      return {
+        prompt: document.querySelector("#prompt").value.trim(),
+        style: document.querySelector("#style").value.trim() || null,
+        targetWordCount,
+        durationSeconds: durationValue ? Number(durationValue) : null
+      };
+    }
+
+    function renderPending(result) {
+      renderStatus({
+        productionId: result.productionId,
+        status: result.status,
+        prompt: formData().prompt,
+        style: formData().style,
+        targetWordCount: formData().targetWordCount,
+        durationSeconds: formData().durationSeconds,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    async function fetchStatus(id) {
+      try {
+        const response = await fetch(`/productions/${encodeURIComponent(id)}`);
+
+        if (response.status === 404) {
+          throw new Error("Production not found.");
+        }
+
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        const production = await response.json();
+        renderStatus(production);
+        setMessage("");
+
+        if (!finalStatuses.has(production.status)) {
+          poll(id);
+        }
+      } catch (error) {
+        clearInterval(pollHandle);
+        pollHandle = 0;
+        setMessage(error.message || "Status lookup failed.", true);
+      }
+    }
+
+    function poll(id) {
+      clearInterval(pollHandle);
+      pollHandle = window.setInterval(() => fetchStatus(id), 1800);
+      fetchStatus(id);
+    }
+
+    function renderStatus(production) {
+      const status = production.status || "Requested";
+      const stepIndex = statusToStepIndex(status);
+      const isFinal = finalStatuses.has(status);
+
+      if (isFinal) {
+        clearInterval(pollHandle);
+        pollHandle = 0;
+      }
+
+      statusPill.textContent = status;
+      statusPill.className = `status-pill ${isFinal ? "ok" : "warn"}`;
+
+      statusContent.className = "";
+      statusContent.innerHTML = `
+        <div class="result-grid">
+          ${metric("Production ID", production.productionId)}
+          ${metric("Status", status)}
+          ${metric("Style", production.style || "-")}
+          ${metric("Updated", formatTime(production.updatedAt))}
+        </div>
+        <div class="metric">
+          <span>Prompt</span>
+          <strong>${escapeHtml(production.prompt || "-")}</strong>
+        </div>
+        <div class="timeline">
+          ${steps.map((step, index) => renderStep(step, index <= stepIndex)).join("")}
+        </div>
+      `;
+    }
+
+    function metric(label, value) {
+      return `
+        <div class="metric">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value ?? "-")}</strong>
+        </div>
+      `;
+    }
+
+    function renderStep(step, done) {
+      return `
+        <div class="step ${done ? "done" : ""}">
+          <div class="dot">${done ? "✓" : "-"}</div>
+          <div>
+            <div class="step-title">${escapeHtml(step[0])}</div>
+            <div class="step-role">${escapeHtml(step[1])}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function statusToStepIndex(status) {
+      const map = {
+        Requested: 0,
+        StoryCreated: 1,
+        SceneImagesCreated: 2,
+        SceneAnimationsCreated: 3,
+        FinalVideoCreated: 4,
+        ReviewPassed: 5,
+        ReviewFailed: 5
+      };
+
+      return map[status] ?? 0;
+    }
+
+    function formatTime(value) {
+      if (!value) {
+        return "-";
+      }
+
+      return new Intl.DateTimeFormat("zh-Hant", {
+        dateStyle: "short",
+        timeStyle: "medium"
+      }).format(new Date(value));
+    }
+
+    function setMessage(message, isError = false) {
+      formMessage.textContent = message;
+      formMessage.className = isError ? "message error" : "message";
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+  </script>
+</body>
+</html>

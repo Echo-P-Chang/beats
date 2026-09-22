@@ -22,7 +22,10 @@ builder.Services.AddRabbitMqMessaging(builder.Configuration);
 
 var app = builder.Build();
 
-app.MapGet("/", () => Results.Ok(new
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
+app.MapGet("/health", () => Results.Ok(new
 {
     service = "Beats Production API",
     status = "ready"
