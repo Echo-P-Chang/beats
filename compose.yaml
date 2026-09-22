@@ -1,0 +1,222 @@
+name: beats
+
+x-dotnet-service: &dotnet-service
+  restart: unless-stopped
+  depends_on:
+    rabbitmq:
+      condition: service_healthy
+    storage-init:
+      condition: service_completed_successfully
+    mysql-init:
+      condition: service_completed_successfully
+  environment: &dotnet-environment
+    RabbitMq__Host: rabbitmq
+    RabbitMq__Port: 5672
+    RabbitMq__VirtualHost: beats
+    RabbitMq__Username: beats
+    RabbitMq__Password: beats-dev
+    AzureStorage__AccountName: devstoreaccount1
+    AzureStorage__ContainerName: artifacts
+    AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=${AZURITE_ACCOUNT_KEY:-Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==};BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
+    Database__Provider: MySql
+
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: beats-rabbitmq
+    hostname: beats-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-beats}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-beats-dev}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-beats}
+    ports:
+      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+    container_name: beats-azurite
+    hostname: beats-azurite
+    restart: unless-stopped
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0
+    ports:
+      - "${AZURITE_BLOB_PORT:-10000}:10000"
+      - "${AZURITE_QUEUE_PORT:-10001}:10001"
+      - "${AZURITE_TABLE_PORT:-10002}:10002"
+    volumes:
+      - azurite-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 10000"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  mysql:
+    image: mysql:8.4
+    container_name: beats-mysql
+    hostname: beats-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-beats-root-dev}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-beats}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  storage-init:
+    image: mcr.microsoft.com/azure-cli:2.64.0
+    container_name: beats-storage-init
+    depends_on:
+      azurite:
+        condition: service_healthy
+    environment:
+      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=${AZURITE_ACCOUNT_KEY:-Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==};BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
+    command: >
+      sh -c "az storage container create
+      --name artifacts
+      --connection-string \"$$AZURE_STORAGE_CONNECTION_STRING\"
+      --only-show-errors >/dev/null
+      && echo \"Container 'artifacts' is ready.\""
+
+  mysql-init:
+    image: mysql:8.4
+    container_name: beats-mysql-init
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-beats-root-dev}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-beats}
+    volumes:
+      - ./sql:/sql:ro
+    command: |
+      sh -c '
+        set -e
+        mysql -h mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" -e "
+          CREATE DATABASE IF NOT EXISTS beats CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+          CREATE USER IF NOT EXISTS '\''beats_api'\''@'\''%'\'' IDENTIFIED BY '\''beats-api-dev'\'';
+          CREATE USER IF NOT EXISTS '\''beats_storyteller'\''@'\''%'\'' IDENTIFIED BY '\''beats-storyteller-dev'\'';
+          CREATE USER IF NOT EXISTS '\''beats_illustrator'\''@'\''%'\'' IDENTIFIED BY '\''beats-illustrator-dev'\'';
+          CREATE USER IF NOT EXISTS '\''beats_animator'\''@'\''%'\'' IDENTIFIED BY '\''beats-animator-dev'\'';
+          CREATE USER IF NOT EXISTS '\''beats_editor'\''@'\''%'\'' IDENTIFIED BY '\''beats-editor-dev'\'';
+          CREATE USER IF NOT EXISTS '\''beats_reviewer'\''@'\''%'\'' IDENTIFIED BY '\''beats-reviewer-dev'\'';
+          GRANT SELECT, INSERT, UPDATE, DELETE ON beats.* TO '\''beats_api'\''@'\''%'\'';
+          GRANT SELECT, INSERT, UPDATE, DELETE ON beats.* TO '\''beats_storyteller'\''@'\''%'\'';
+          GRANT SELECT, INSERT, UPDATE, DELETE ON beats.* TO '\''beats_illustrator'\''@'\''%'\'';
+          GRANT SELECT, INSERT, UPDATE, DELETE ON beats.* TO '\''beats_animator'\''@'\''%'\'';
+          GRANT SELECT, INSERT, UPDATE, DELETE ON beats.* TO '\''beats_editor'\''@'\''%'\'';
+          GRANT SELECT, INSERT, UPDATE, DELETE ON beats.* TO '\''beats_reviewer'\''@'\''%'\'';
+          FLUSH PRIVILEGES;
+        "
+        mysql -h mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" beats < /sql/mysql-schema.sql
+        echo "MySQL database beats is ready."
+      '
+
+  production-api:
+    <<: *dotnet-service
+    container_name: beats-production-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT_PATH: src/Production.Api/Beats.Production.Api.csproj
+        APP_DLL: Beats.Production.Api.dll
+    ports:
+      - "${PRODUCTION_API_PORT:-5088}:8080"
+    environment:
+      <<: *dotnet-environment
+      ASPNETCORE_URLS: http://+:8080
+      Database__ConnectionStringEnvironmentVariable: BEATS_DB_API_CONNECTION_STRING
+      BEATS_DB_API_CONNECTION_STRING: "Server=mysql;Port=3306;Database=beats;User ID=beats_api;Password=beats-api-dev;SslMode=None;AllowPublicKeyRetrieval=True;"
+
+  storyteller-agent:
+    <<: *dotnet-service
+    container_name: beats-storyteller-agent
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT_PATH: src/Agents.Storyteller/Beats.Agents.Storyteller.csproj
+        APP_DLL: Beats.Agents.Storyteller.dll
+    environment:
+      <<: *dotnet-environment
+      Database__ConnectionStringEnvironmentVariable: BEATS_DB_STORYTELLER_CONNECTION_STRING
+      BEATS_DB_STORYTELLER_CONNECTION_STRING: "Server=mysql;Port=3306;Database=beats;User ID=beats_storyteller;Password=beats-storyteller-dev;SslMode=None;AllowPublicKeyRetrieval=True;"
+
+  illustrator-agent:
+    <<: *dotnet-service
+    container_name: beats-illustrator-agent
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT_PATH: src/Agents.Illustrator/Beats.Agents.Illustrator.csproj
+        APP_DLL: Beats.Agents.Illustrator.dll
+    environment:
+      <<: *dotnet-environment
+      Database__ConnectionStringEnvironmentVariable: BEATS_DB_ILLUSTRATOR_CONNECTION_STRING
+      BEATS_DB_ILLUSTRATOR_CONNECTION_STRING: "Server=mysql;Port=3306;Database=beats;User ID=beats_illustrator;Password=beats-illustrator-dev;SslMode=None;AllowPublicKeyRetrieval=True;"
+
+  animator-agent:
+    <<: *dotnet-service
+    container_name: beats-animator-agent
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT_PATH: src/Agents.Animator/Beats.Agents.Animator.csproj
+        APP_DLL: Beats.Agents.Animator.dll
+    environment:
+      <<: *dotnet-environment
+      Database__ConnectionStringEnvironmentVariable: BEATS_DB_ANIMATOR_CONNECTION_STRING
+      BEATS_DB_ANIMATOR_CONNECTION_STRING: "Server=mysql;Port=3306;Database=beats;User ID=beats_animator;Password=beats-animator-dev;SslMode=None;AllowPublicKeyRetrieval=True;"
+
+  editor-agent:
+    <<: *dotnet-service
+    container_name: beats-editor-agent
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT_PATH: src/Agents.Editor/Beats.Agents.Editor.csproj
+        APP_DLL: Beats.Agents.Editor.dll
+    environment:
+      <<: *dotnet-environment
+      Database__ConnectionStringEnvironmentVariable: BEATS_DB_EDITOR_CONNECTION_STRING
+      BEATS_DB_EDITOR_CONNECTION_STRING: "Server=mysql;Port=3306;Database=beats;User ID=beats_editor;Password=beats-editor-dev;SslMode=None;AllowPublicKeyRetrieval=True;"
+
+  reviewer-agent:
+    <<: *dotnet-service
+    container_name: beats-reviewer-agent
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT_PATH: src/Agents.Reviewer/Beats.Agents.Reviewer.csproj
+        APP_DLL: Beats.Agents.Reviewer.dll
+    environment:
+      <<: *dotnet-environment
+      Database__ConnectionStringEnvironmentVariable: BEATS_DB_REVIEWER_CONNECTION_STRING
+      BEATS_DB_REVIEWER_CONNECTION_STRING: "Server=mysql;Port=3306;Database=beats;User ID=beats_reviewer;Password=beats-reviewer-dev;SslMode=None;AllowPublicKeyRetrieval=True;"
+
+volumes:
+  rabbitmq-data:
+  azurite-data:
+  mysql-data:

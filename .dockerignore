@@ -1,0 +1,13 @@
+**/.DS_Store
+**/.git
+**/.gitignore
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/TestResults
+artifacts
+.env
+.env.*
+!.env.example
+README.local.md
