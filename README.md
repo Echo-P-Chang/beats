@@ -312,6 +312,29 @@ flows/production-flow.json
 docker compose restart production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
 ```
 
+#### DI 與 choreography 解耦合設計
+
+`production-flow.json` 是這個 demo 的流程拓樸來源。它描述每個角色會訂閱哪些 event，以及在處理完成後會發布哪些 event；agent 本身不需要知道下一個 agent 是誰。
+
+設計分工如下：
+
+- `Production.Contracts` 定義事件 payload 與共用 contract，也就是所有服務共同遵守的「遊戲規則」。
+- `Production.Flows` 讀取 `production-flow.json`，並透過 DI 註冊 `IProductionFlow`，讓 API 與 agents 透過抽象介面查詢目前流程。
+- `Production.Middleware` 提供 RabbitMQ、artifact storage、database 等共用基礎設施 adapters。
+- 各 `Agents.*` project 只保留自己的能力實作，例如說書、繪圖、動畫、剪輯、審查，不直接保存流程拓樸。
+
+啟動時，每個 agent 只宣告自己的 role，例如 `storyteller-agent`。`Production.Flows` 會依照 `production-flow.json` 找出該 role 的 subscriptions，掃描 agent assembly 中對應的 MassTransit consumer，並透過 DI 註冊到 RabbitMQ。consumer 完成工作後，也會透過 `IProductionFlow` 查詢下一個要發布的 event type，而不是在 agent 內 hard code 流程名稱。
+
+這讓整體流程維持 choreography 架構：
+
+- 沒有中央 orchestrator 逐步呼叫每個 agent。
+- API 與 agents 只發布 event 到 RabbitMQ event bus。
+- agents 只根據自己訂閱到的 event 反應。
+- 流程順序由 `production-flow.json` 決定。
+- 修改訂閱/發布拓樸時，通常只要更新 config 並 restart 相關服務，不需要重新編譯。
+
+注意：RabbitMQ queue binding 與 MassTransit consumer topology 是在 service 啟動時建立，因此變更 subscriptions 後仍需要 restart service 才會生效。
+
 ### 專案結構
 
 ```text
@@ -646,6 +669,29 @@ This file is mounted into every .NET service at `/app/flows`. If you only change
 ```bash
 docker compose restart production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
 ```
+
+#### DI and Choreography Decoupling
+
+`production-flow.json` is the flow topology source for this demo. It describes which events each role subscribes to and which events it publishes after completing work. An agent does not need to know which agent comes next.
+
+The responsibilities are separated like this:
+
+- `Production.Contracts` defines shared event payloads and contracts, which are the common rules every service follows.
+- `Production.Flows` loads `production-flow.json` and registers `IProductionFlow` through dependency injection, so the API and agents can query the active flow through an abstraction.
+- `Production.Middleware` provides shared infrastructure adapters for RabbitMQ, artifact storage, and the database.
+- Each `Agents.*` project keeps only its own capability implementation, such as storytelling, illustration, animation, editing, or review. It does not own the flow topology.
+
+At startup, each agent declares only its role, such as `storyteller-agent`. `Production.Flows` reads `production-flow.json`, finds that role's subscriptions, scans the agent assembly for the matching MassTransit consumer, and registers it through DI. After a consumer finishes its work, it asks `IProductionFlow` which event type to publish next instead of hardcoding the flow name inside the agent.
+
+This keeps the system in a choreography style:
+
+- There is no central orchestrator calling agents one by one.
+- The API and agents only publish events to the RabbitMQ event bus.
+- Agents react only to the events they subscribe to.
+- The flow order is controlled by `production-flow.json`.
+- Changing subscription/publication topology usually means editing config and restarting related services, not recompiling code.
+
+Note: RabbitMQ queue bindings and MassTransit consumer topology are created when each service starts, so subscription changes still require a service restart.
 
 ### Project Layout
 
