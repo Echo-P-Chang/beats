@@ -22,6 +22,10 @@ public interface IProductionRepository
         Guid productionId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ArtifactRecord>> GetProductionArtifactsAsync(
+        Guid productionId,
+        CancellationToken cancellationToken = default);
+
     Task UpdateProductionStatusAsync(
         Guid productionId,
         string status,

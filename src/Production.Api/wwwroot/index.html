@@ -289,9 +289,42 @@
       font-weight: 800;
     }
 
+    .step-heading {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
     .step-role {
       margin-top: 2px;
       font-size: 0.82rem;
+    }
+
+    .artifact-actions {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .artifact-button {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--accent-strong);
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .artifact-button:hover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
     }
 
     .lookup {
@@ -706,8 +739,11 @@
         }
 
 	        const production = await response.json();
-	        const events = await fetchProductionEvents(id);
-	        renderStatus(production, events);
+	        const [events, artifacts] = await Promise.all([
+	          fetchProductionEvents(id),
+	          fetchProductionArtifacts(id)
+	        ]);
+	        renderStatus(production, events, artifacts);
 	        setMessage("");
 
         if (!finalStatuses.has(production.status)) {
@@ -736,7 +772,17 @@
 	      return await response.json();
 	    }
 
-		    function renderStatus(production, events = []) {
+	    async function fetchProductionArtifacts(id) {
+	      const response = await fetch(`/productions/${encodeURIComponent(id)}/artifacts`);
+
+	      if (!response.ok) {
+	        throw new Error(await response.text());
+	      }
+
+	      return await response.json();
+	    }
+
+		    function renderStatus(production, events = [], artifacts = []) {
 		      const status = production.status || "Requested";
 		      const stepIndex = statusToStepIndex(status);
 		      const isFinal = finalStatuses.has(status);
@@ -768,7 +814,8 @@
 	          ${steps.map((step, index) => renderStep(
 	            step,
 	            hasEvents ? eventTypes.has(step[0]) : index <= stepIndex,
-	            events.find((event) => event.eventType === step[0]))).join("")}
+	            events.find((event) => event.eventType === step[0]),
+	            artifacts)).join("")}
 	        </div>
 	      `;
 
@@ -840,17 +887,51 @@
       `;
     }
 
-	    function renderStep(step, done, event) {
+	    function renderStep(step, done, event, artifacts = []) {
+	      const stepArtifacts = event
+	        ? artifacts.filter((artifact) => artifact.agentRole === event.producer && artifact.downloadUrl)
+	        : [];
+
 	      return `
 	        <div class="step ${done ? "done" : ""}">
 	          <div class="dot">${done ? "✓" : "-"}</div>
-	          <div>
-	            <div class="step-title">${escapeHtml(step[0])}</div>
+	          <div class="step-main">
+	            <div class="step-heading">
+	              <div class="step-title">${escapeHtml(step[0])}</div>
+	              ${renderArtifactButtons(stepArtifacts)}
+	            </div>
 	            <div class="step-role">${escapeHtml(event ? `${step[1]} · ${formatTime(event.createdAt)}` : step[1])}</div>
 	          </div>
 	        </div>
 	      `;
     }
+
+	    function renderArtifactButtons(artifacts) {
+	      if (artifacts.length === 0) {
+	        return "";
+	      }
+
+	      return `
+	        <span class="artifact-actions">
+	          ${artifacts.map((artifact, index) => `
+	            <a
+	              class="artifact-button"
+	              href="${escapeAttribute(artifact.downloadUrl)}"
+	              download="${escapeAttribute(artifactFileName(artifact))}"
+	              title="${escapeAttribute(artifact.description || artifact.mediaType || "Download artifact")}">
+	              ${escapeHtml(artifacts.length === 1 ? "Download" : `Download ${index + 1}`)}
+	            </a>
+	          `).join("")}
+	        </span>
+	      `;
+	    }
+
+	    function artifactFileName(artifact) {
+	      const path = artifact.artifactPath || "";
+	      const fileName = path.split("/").filter(Boolean).at(-1);
+
+	      return fileName || "artifact.txt";
+	    }
 
 	    function statusToStepIndex(status) {
 	      const map = {
@@ -1066,6 +1147,10 @@
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value);
     }
   </script>
 </body>

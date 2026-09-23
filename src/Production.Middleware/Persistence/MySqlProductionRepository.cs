@@ -142,6 +142,40 @@ public sealed class MySqlProductionRepository(IOptions<DatabaseOptions> options)
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ArtifactRecord>> GetProductionArtifactsAsync(
+        Guid productionId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT ArtifactId, ProductionId, AgentRole, ArtifactUri, MediaType, Description, CreatedAt
+            FROM Artifacts
+            WHERE ProductionId = @ProductionId
+            ORDER BY CreatedAt, ArtifactId;
+            """;
+
+        Add(command, "@ProductionId", productionId);
+
+        var records = new List<ArtifactRecord>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            records.Add(new ArtifactRecord(
+                GetGuid(reader, 0),
+                GetGuid(reader, 1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                ToDateTimeOffset(reader.GetDateTime(6))));
+        }
+
+        return records;
+    }
+
     public async Task RecordEventAsync<TPayload>(
         EventEnvelope<TPayload> message,
         CancellationToken cancellationToken = default)

@@ -119,6 +119,41 @@ beats-mysql
 
 `beats-storage-init` 和 `beats-mysql-init` 是一次性的初始化 job，結束並顯示 `Exited (0)` 是正常的。
 
+### 本機 Ollama
+
+Ollama 不會被包進 Docker compose；它被視為外部 AI 服務。Docker 裡的 API 與 agents 預設透過這個位址呼叫 Mac 上的 Ollama：
+
+```text
+http://host.docker.internal:11434
+```
+
+預設模型設定在 `.env.example` 與 `compose.yaml`：
+
+```text
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_MODEL=llama3.1:8b
+OLLAMA_TIMEOUT_SECONDS=120
+OLLAMA_TEMPERATURE=0.7
+OLLAMA_NUM_PREDICT=2048
+STORYTELLER_OLLAMA_MODEL=hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M
+STORYTELLER_OLLAMA_TIMEOUT_SECONDS=300
+STORYTELLER_OLLAMA_NUM_PREDICT=4096
+```
+
+`OLLAMA_MODEL` 是預設模型；Storyteller 會使用 `STORYTELLER_OLLAMA_MODEL` 覆蓋成故事生成專用模型。
+
+如果直接在本機跑 .NET，不透過 Docker，`OllamaOptions` 的預設 `BaseUrl` 是：
+
+```text
+http://localhost:11434
+```
+
+確認 Ollama 本機服務：
+
+```bash
+curl -s http://127.0.0.1:11434/api/tags
+```
+
 ### 使用 UI
 
 開啟：
@@ -189,6 +224,17 @@ ProductionRequested
   -> SceneAnimationsCreated
   -> FinalVideoCreated
   -> ReviewPassed
+```
+
+測試專案內的 Ollama text generation client：
+
+```bash
+curl -s -X POST http://127.0.0.1:5088/ai/text-generations \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "prompt": "請用一句繁體中文回答：本機 Ollama 已經接上了嗎？",
+    "temperature": 0.2
+  }'
 ```
 
 ### 查看 Logs
@@ -423,6 +469,41 @@ beats-mysql
 
 The `beats-storage-init` and `beats-mysql-init` containers are one-time initialization jobs. It is normal for them to exit with status `0`.
 
+### Local Ollama
+
+Ollama is not included in Docker compose. It is treated as an external AI service. The API and agents running inside Docker call Ollama on the Mac through:
+
+```text
+http://host.docker.internal:11434
+```
+
+The default model settings are in `.env.example` and `compose.yaml`:
+
+```text
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_MODEL=llama3.1:8b
+OLLAMA_TIMEOUT_SECONDS=120
+OLLAMA_TEMPERATURE=0.7
+OLLAMA_NUM_PREDICT=2048
+STORYTELLER_OLLAMA_MODEL=hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M
+STORYTELLER_OLLAMA_TIMEOUT_SECONDS=300
+STORYTELLER_OLLAMA_NUM_PREDICT=4096
+```
+
+`OLLAMA_MODEL` is the default model. Storyteller overrides it with `STORYTELLER_OLLAMA_MODEL` for story generation.
+
+When running .NET directly on the host instead of through Docker, `OllamaOptions` defaults to:
+
+```text
+http://localhost:11434
+```
+
+Check the local Ollama service:
+
+```bash
+curl -s http://127.0.0.1:11434/api/tags
+```
+
 ### Use The UI
 
 Open:
@@ -493,6 +574,17 @@ ProductionRequested
   -> SceneAnimationsCreated
   -> FinalVideoCreated
   -> ReviewPassed
+```
+
+Test the project's Ollama text generation client:
+
+```bash
+curl -s -X POST http://127.0.0.1:5088/ai/text-generations \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "prompt": "Answer in one short sentence: is local Ollama connected?",
+    "temperature": 0.2
+  }'
 ```
 
 ### Watch Logs

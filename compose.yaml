@@ -20,6 +20,11 @@ x-dotnet-service: &dotnet-service
     AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=${AZURITE_ACCOUNT_KEY:-Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==};BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
     Database__Provider: MySql
     ProductionFlows__ConfigPath: flows/production-flow.json
+    Ollama__BaseUrl: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    Ollama__Model: ${OLLAMA_MODEL:-llama3.1:8b}
+    Ollama__TimeoutSeconds: ${OLLAMA_TIMEOUT_SECONDS:-120}
+    Ollama__Temperature: ${OLLAMA_TEMPERATURE:-0.7}
+    Ollama__NumPredict: ${OLLAMA_NUM_PREDICT:-2048}
   volumes:
     - ./flows:/app/flows:ro
 
@@ -162,6 +167,9 @@ services:
       <<: *dotnet-environment
       Database__ConnectionStringEnvironmentVariable: BEATS_DB_STORYTELLER_CONNECTION_STRING
       BEATS_DB_STORYTELLER_CONNECTION_STRING: "Server=mysql;Port=3306;Database=beats;User ID=beats_storyteller;Password=beats-storyteller-dev;SslMode=None;AllowPublicKeyRetrieval=True;"
+      Ollama__Model: ${STORYTELLER_OLLAMA_MODEL:-hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M}
+      Ollama__TimeoutSeconds: ${STORYTELLER_OLLAMA_TIMEOUT_SECONDS:-300}
+      Ollama__NumPredict: ${STORYTELLER_OLLAMA_NUM_PREDICT:-4096}
 
   illustrator-agent:
     <<: *dotnet-service

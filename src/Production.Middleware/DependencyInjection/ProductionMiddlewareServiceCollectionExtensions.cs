@@ -1,3 +1,4 @@
+using Beats.Production.Middleware.Ai;
 using Beats.Production.Middleware.Artifacts;
 using Beats.Production.Middleware.Eventing;
 using Beats.Production.Middleware.Persistence;
@@ -86,6 +87,43 @@ public static class ProductionMiddlewareServiceCollectionExtensions
         {
             services.AddSingleton<IProductionRepository, MySqlProductionRepository>();
         }
+
+        return services;
+    }
+
+    public static IServiceCollection AddOllamaTextGeneration(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.Configure<OllamaOptions>(options =>
+        {
+            var section = configuration.GetSection(OllamaOptions.SectionName);
+
+            options.BaseUrl = section[nameof(OllamaOptions.BaseUrl)] ?? options.BaseUrl;
+            options.Model = section[nameof(OllamaOptions.Model)] ?? options.Model;
+
+            if (int.TryParse(section[nameof(OllamaOptions.TimeoutSeconds)], out var timeoutSeconds))
+            {
+                options.TimeoutSeconds = timeoutSeconds;
+            }
+
+            if (double.TryParse(section[nameof(OllamaOptions.Temperature)], out var temperature))
+            {
+                options.Temperature = temperature;
+            }
+
+            if (int.TryParse(section[nameof(OllamaOptions.NumPredict)], out var numPredict))
+            {
+                options.NumPredict = numPredict;
+            }
+        });
+
+        services.AddHttpClient<ITextGenerationClient, OllamaTextGenerationClient>((serviceProvider, client) =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<OllamaOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        });
 
         return services;
     }
