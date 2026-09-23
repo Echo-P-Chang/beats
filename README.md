@@ -21,6 +21,60 @@ Agents.Reviewer
 
 流程採 choreography 架構。每個 agent 只訂閱自己關心的事件，完成自己的工作後寫入 MySQL、產出 artifact 到 Azurite，然後發布下一個事件。
 
+### Flow Config
+
+choreography 流程定義在：
+
+```text
+flows/production-flow.json
+```
+
+這個檔案會 mount 到每個 .NET service 的 `/app/flows`。如果只調整 agent 訂閱/發布的 flow config，不需要重新編譯；修改後 restart 相關服務即可：
+
+```bash
+docker compose restart production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
+```
+
+#### DI 與 choreography 解耦合設計
+
+`production-flow.json` 是這個 demo 的流程拓樸來源。它描述每個角色會訂閱哪些 event，以及在處理完成後會發布哪些 event；agent 本身不需要知道下一個 agent 是誰。
+
+設計分工如下：
+
+- `Production.Contracts` 定義事件 payload 與共用 contract，也就是所有服務共同遵守的「遊戲規則」。
+- `Production.Flows` 讀取 `production-flow.json`，並透過 DI 註冊 `IProductionFlow`，讓 API 與 agents 透過抽象介面查詢目前流程。
+- `Production.Middleware` 提供 RabbitMQ、artifact storage、database 等共用基礎設施 adapters。
+- 各 `Agents.*` project 只保留自己的能力實作，例如說書、繪圖、動畫、剪輯、審查，不直接保存流程拓樸。
+
+啟動時，每個 agent 只宣告自己的 role，例如 `storyteller-agent`。`Production.Flows` 會依照 `production-flow.json` 找出該 role 的 subscriptions，掃描 agent assembly 中對應的 MassTransit consumer，並透過 DI 註冊到 RabbitMQ。consumer 完成工作後，也會透過 `IProductionFlow` 查詢下一個要發布的 event type，而不是在 agent 內 hard code 流程名稱。
+
+這讓整體流程維持 choreography 架構：
+
+- 沒有中央 orchestrator 逐步呼叫每個 agent。
+- API 與 agents 只發布 event 到 RabbitMQ event bus。
+- agents 只根據自己訂閱到的 event 反應。
+- 流程順序由 `production-flow.json` 決定。
+- 修改訂閱/發布拓樸時，通常只要更新 config 並 restart 相關服務，不需要重新編譯。
+
+注意：RabbitMQ queue binding 與 MassTransit consumer topology 是在 service 啟動時建立，因此變更 subscriptions 後仍需要 restart service 才會生效。
+
+### 專案結構
+
+```text
+flows/production-flow.json  choreography 設定檔
+src/Production.Api          建立與查詢 productions 的 API / UI
+src/Production.Contracts    共用 events、payloads、contracts
+src/Production.Flows        choreography 流程規則，定義 agent 訂閱與發布拓樸
+src/Production.Middleware   共用 event bus、artifact、persistence adapters
+src/Agents.Storyteller      說書人能力實作，訂閱/發布由 Production.Flows 載入
+src/Agents.Illustrator      繪圖師能力實作，訂閱/發布由 Production.Flows 載入
+src/Agents.Animator         動畫師能力實作，訂閱/發布由 Production.Flows 載入
+src/Agents.Editor           剪輯師能力實作，訂閱/發布由 Production.Flows 載入
+src/Agents.Reviewer         審查者能力實作，訂閱/發布由 Production.Flows 載入
+sql/                        database schema
+docs/                       額外本機操作文件
+```
+
 ### 需求
 
 只需要 Docker。
@@ -296,60 +350,6 @@ docker compose down -v
 
 ```bash
 docker compose up -d --build
-```
-
-### Flow Config
-
-choreography 流程定義在：
-
-```text
-flows/production-flow.json
-```
-
-這個檔案會 mount 到每個 .NET service 的 `/app/flows`。如果只調整 agent 訂閱/發布的 flow config，不需要重新編譯；修改後 restart 相關服務即可：
-
-```bash
-docker compose restart production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
-```
-
-#### DI 與 choreography 解耦合設計
-
-`production-flow.json` 是這個 demo 的流程拓樸來源。它描述每個角色會訂閱哪些 event，以及在處理完成後會發布哪些 event；agent 本身不需要知道下一個 agent 是誰。
-
-設計分工如下：
-
-- `Production.Contracts` 定義事件 payload 與共用 contract，也就是所有服務共同遵守的「遊戲規則」。
-- `Production.Flows` 讀取 `production-flow.json`，並透過 DI 註冊 `IProductionFlow`，讓 API 與 agents 透過抽象介面查詢目前流程。
-- `Production.Middleware` 提供 RabbitMQ、artifact storage、database 等共用基礎設施 adapters。
-- 各 `Agents.*` project 只保留自己的能力實作，例如說書、繪圖、動畫、剪輯、審查，不直接保存流程拓樸。
-
-啟動時，每個 agent 只宣告自己的 role，例如 `storyteller-agent`。`Production.Flows` 會依照 `production-flow.json` 找出該 role 的 subscriptions，掃描 agent assembly 中對應的 MassTransit consumer，並透過 DI 註冊到 RabbitMQ。consumer 完成工作後，也會透過 `IProductionFlow` 查詢下一個要發布的 event type，而不是在 agent 內 hard code 流程名稱。
-
-這讓整體流程維持 choreography 架構：
-
-- 沒有中央 orchestrator 逐步呼叫每個 agent。
-- API 與 agents 只發布 event 到 RabbitMQ event bus。
-- agents 只根據自己訂閱到的 event 反應。
-- 流程順序由 `production-flow.json` 決定。
-- 修改訂閱/發布拓樸時，通常只要更新 config 並 restart 相關服務，不需要重新編譯。
-
-注意：RabbitMQ queue binding 與 MassTransit consumer topology 是在 service 啟動時建立，因此變更 subscriptions 後仍需要 restart service 才會生效。
-
-### 專案結構
-
-```text
-flows/production-flow.json  choreography 設定檔
-src/Production.Api          建立與查詢 productions 的 API / UI
-src/Production.Contracts    共用 events、payloads、contracts
-src/Production.Flows        choreography 流程規則，定義 agent 訂閱與發布拓樸
-src/Production.Middleware   共用 event bus、artifact、persistence adapters
-src/Agents.Storyteller      說書人能力實作，訂閱/發布由 Production.Flows 載入
-src/Agents.Illustrator      繪圖師能力實作，訂閱/發布由 Production.Flows 載入
-src/Agents.Animator         動畫師能力實作，訂閱/發布由 Production.Flows 載入
-src/Agents.Editor           剪輯師能力實作，訂閱/發布由 Production.Flows 載入
-src/Agents.Reviewer         審查者能力實作，訂閱/發布由 Production.Flows 載入
-sql/                        database schema
-docs/                       額外本機操作文件
 ```
 
 ### 備註
