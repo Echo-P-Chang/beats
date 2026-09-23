@@ -8,6 +8,7 @@ using Beats.Production.Middleware.Artifacts;
 using Beats.Production.Middleware.Eventing;
 using Beats.Production.Middleware.Persistence;
 using MassTransit;
+using System.Text;
 
 namespace Beats.Agents.Animator;
 
@@ -32,28 +33,26 @@ public sealed class SceneImagesCreatedConsumer(
 
         await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
 
-        var inputArtifact = incoming.Payload.Images[0].Artifact;
-        var manuscript = await ArtifactText.ReadAsync(
-            artifactStore,
-            inputArtifact.Uri,
-            context.CancellationToken);
+        var inputArtifact = incoming.Payload.Images.FirstOrDefault()?.Artifact;
+        var manuscript = new StringBuilder();
 
-        manuscript += $"""
+        manuscript.AppendLine($"# Production {incoming.ProductionId}");
+        manuscript.AppendLine();
+        manuscript.AppendLine("## Animator");
+        manuscript.AppendLine("Motion plan:");
+        manuscript.AppendLine("The animator received image artifacts and creates timing language for each scene.");
+        manuscript.AppendLine();
+        manuscript.AppendLine("Scene animation placeholders:");
 
-
-            ## Animator
-            Motion plan:
-            The animator converts the visual notes into timing language. Each scene receives camera movement, transition rhythm, and animation intent while preserving the same text artifact.
-
-            Animation placeholders:
-            - scene-001: Slow push-in, light page-turn transition, 8 seconds.
-            - scene-002: Gentle parallax, character focus, 10 seconds.
-            - scene-003: Hold on final composition, soft fade, 7 seconds.
-            """;
+        foreach (var image in incoming.Payload.Images.OrderBy(image => image.Order))
+        {
+            manuscript.AppendLine($"- {image.SceneId}: Slow parallax push-in, gentle camera drift, soft transition, 8 seconds.");
+            manuscript.AppendLine($"  Source image: {image.Artifact.Uri}");
+        }
 
         var artifactUri = await ArtifactText.SaveAsync(
             artifactStore,
-            manuscript,
+            manuscript.ToString(),
             $"productions/{incoming.ProductionId}/03-animator/manuscript.txt",
             context.CancellationToken);
 
@@ -94,7 +93,7 @@ public sealed class SceneImagesCreatedConsumer(
                 AgentRoles.Animator,
                 incoming.EventId,
                 outgoing.EventId,
-                inputArtifact.Uri,
+                inputArtifact?.Uri,
                 artifact.Uri,
                 "Completed",
                 startedAt,

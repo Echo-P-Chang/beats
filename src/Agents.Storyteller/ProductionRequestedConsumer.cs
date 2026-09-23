@@ -38,14 +38,21 @@ public sealed class ProductionRequestedConsumer(
             new TextGenerationRequest(
                 BuildStoryPrompt(incoming),
                 SystemPrompt: """
-                    You are the Storyteller agent in an event-driven AI production pipeline.
-                    Write in Traditional Chinese.
-                    Do not reveal chain-of-thought, hidden reasoning, analysis notes, or channel tags.
-                    Produce a complete story draft and clearly separate the story into scenes.
-                    Keep the output useful for downstream illustrator, animator, editor, and reviewer agents.
+                    你是 event-driven AI production pipeline 裡的「說書人」agent。
+                    你的任務是交付一篇完整、可閱讀的故事，而不是摘要、草稿或創作分析。
+
+                    重要規則：
+                    - 只輸出最終故事稿，不要輸出分析、思考過程、規劃筆記、hidden reasoning、channel tags。
+                    - 使用台灣繁體中文與台灣華語書面語。
+                    - 不可使用粵語詞或香港口語，例如：佢、嘅、啲、喺、唔、咁、冇、係、嘢。
+                    - 不可使用簡體字或中國大陸慣用語，例如：视频、里面、公交、质量、后台、账号。
+                    - 故事本文是最重要的交付物，必須完整，有開頭、發展、轉折、高潮與結尾。
+                    - 先寫完整故事，再寫場景拆解。若長度不夠，縮短場景拆解，不可縮短或截斷故事。
+                    - 不要寫「以下是」或任何前言，直接從標題開始。
+                    - 最後一行必須是：【故事完】
                     """,
-                Temperature: 0.8,
-                NumPredict: 4096),
+                Temperature: 0.65,
+                NumPredict: 8192),
             context.CancellationToken);
 
         var manuscript = $"""
@@ -124,7 +131,7 @@ public sealed class ProductionRequestedConsumer(
     private static string BuildStoryPrompt(EventEnvelope<ProductionRequestedPayload> incoming)
     {
         return $"""
-            請根據以下需求創作故事，並讓後續 agent 可以直接使用：
+            請根據以下需求創作一份完整故事稿。請務必使用台灣繁體中文，不要使用粵語、簡體字或中國大陸慣用語。
 
             ProductionId: {incoming.ProductionId}
             使用者需求: {incoming.Payload.Prompt}
@@ -132,15 +139,29 @@ public sealed class ProductionRequestedConsumer(
             目標字數: 約 {incoming.Payload.TargetWordCount} 字
             影片長度: {(incoming.Payload.DurationSeconds is null ? "未指定" : $"{incoming.Payload.DurationSeconds} 秒")}
 
-            請輸出：
-            1. 故事標題
-            2. 完整故事本文
-            3. 場景拆解，至少 3 個場景，每個場景包含：
-               - 場景名稱
-               - 畫面描述
-               - 角色動作
-               - 情緒與色彩
-               - 給繪圖師與動畫師的提示
+            請嚴格依照以下格式輸出，不要加入格式外的文字：
+
+            # 故事標題
+            請給故事一個明確、適合繪本或短片的標題。
+
+            ## 完整故事
+            這一節只能寫故事本文，不要條列。
+            請寫約 {incoming.Payload.TargetWordCount} 字，至少 6 個自然段。
+            故事必須完整收尾，不可以停在半句、半段或未完成的情節。
+            故事結尾必須明確解決主角遇到的問題。
+
+            ## 場景拆解
+            請拆成 3 到 5 個場景。場景拆解要精簡，每個欄位 1 句即可：
+
+            ### 場景一：場景名稱
+            - 畫面描述：
+            - 角色動作：
+            - 情緒與色彩：
+            - 給繪圖師的提示：
+            - 給動畫師的提示：
+
+            最後一行請輸出：
+            【故事完】
             """;
     }
 }

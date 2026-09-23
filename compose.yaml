@@ -25,6 +25,21 @@ x-dotnet-service: &dotnet-service
     Ollama__TimeoutSeconds: ${OLLAMA_TIMEOUT_SECONDS:-120}
     Ollama__Temperature: ${OLLAMA_TEMPERATURE:-0.7}
     Ollama__NumPredict: ${OLLAMA_NUM_PREDICT:-2048}
+    ComfyUI__BaseUrl: ${COMFYUI_BASE_URL:-http://host.docker.internal:8188}
+    ComfyUI__TimeoutSeconds: ${COMFYUI_TIMEOUT_SECONDS:-900}
+    ComfyUI__PollIntervalSeconds: ${COMFYUI_POLL_INTERVAL_SECONDS:-2}
+    ComfyUI__Model: ${COMFYUI_MODEL:-flux1-schnell-Q4_K_S.gguf}
+    ComfyUI__ClipName1: ${COMFYUI_CLIP_NAME1:-clip_l.safetensors}
+    ComfyUI__ClipName2: ${COMFYUI_CLIP_NAME2:-t5xxl_fp8_e4m3fn.safetensors}
+    ComfyUI__VaeName: ${COMFYUI_VAE_NAME:-ae.safetensors}
+    ComfyUI__Width: ${COMFYUI_WIDTH:-768}
+    ComfyUI__Height: ${COMFYUI_HEIGHT:-768}
+    ComfyUI__Steps: ${COMFYUI_STEPS:-4}
+    ComfyUI__Cfg: ${COMFYUI_CFG:-1}
+    ComfyUI__Guidance: ${COMFYUI_GUIDANCE:-3.5}
+    ComfyUI__SamplerName: ${COMFYUI_SAMPLER_NAME:-euler}
+    ComfyUI__Scheduler: ${COMFYUI_SCHEDULER:-simple}
+    ComfyUI__MaxScenes: ${COMFYUI_MAX_SCENES:-3}
   volumes:
     - ./flows:/app/flows:ro
 
@@ -168,8 +183,8 @@ services:
       Database__ConnectionStringEnvironmentVariable: BEATS_DB_STORYTELLER_CONNECTION_STRING
       BEATS_DB_STORYTELLER_CONNECTION_STRING: "Server=mysql;Port=3306;Database=beats;User ID=beats_storyteller;Password=beats-storyteller-dev;SslMode=None;AllowPublicKeyRetrieval=True;"
       Ollama__Model: ${STORYTELLER_OLLAMA_MODEL:-hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M}
-      Ollama__TimeoutSeconds: ${STORYTELLER_OLLAMA_TIMEOUT_SECONDS:-300}
-      Ollama__NumPredict: ${STORYTELLER_OLLAMA_NUM_PREDICT:-4096}
+      Ollama__TimeoutSeconds: ${STORYTELLER_OLLAMA_TIMEOUT_SECONDS:-900}
+      Ollama__NumPredict: ${STORYTELLER_OLLAMA_NUM_PREDICT:-8192}
 
   illustrator-agent:
     <<: *dotnet-service

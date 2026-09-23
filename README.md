@@ -136,8 +136,8 @@ OLLAMA_TIMEOUT_SECONDS=120
 OLLAMA_TEMPERATURE=0.7
 OLLAMA_NUM_PREDICT=2048
 STORYTELLER_OLLAMA_MODEL=hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M
-STORYTELLER_OLLAMA_TIMEOUT_SECONDS=300
-STORYTELLER_OLLAMA_NUM_PREDICT=4096
+STORYTELLER_OLLAMA_TIMEOUT_SECONDS=900
+STORYTELLER_OLLAMA_NUM_PREDICT=8192
 ```
 
 `OLLAMA_MODEL` 是預設模型；Storyteller 會使用 `STORYTELLER_OLLAMA_MODEL` 覆蓋成故事生成專用模型。
@@ -152,6 +152,43 @@ http://localhost:11434
 
 ```bash
 curl -s http://127.0.0.1:11434/api/tags
+```
+
+### 本機 ComfyUI / FLUX
+
+ComfyUI 不會被包進 Docker compose；它和 Ollama 一樣被視為外部 AI 服務。Illustrator agent 會呼叫 ComfyUI 產生 scene image artifacts。
+
+Docker 裡的 Illustrator 預設透過這個位址呼叫 Mac 上的 ComfyUI：
+
+```text
+http://host.docker.internal:8188
+```
+
+目前預設使用 FLUX.1 schnell GGUF quantized：
+
+```text
+COMFYUI_BASE_URL=http://host.docker.internal:8188
+COMFYUI_MODEL=flux1-schnell-Q4_K_S.gguf
+COMFYUI_CLIP_NAME1=clip_l.safetensors
+COMFYUI_CLIP_NAME2=t5xxl_fp8_e4m3fn.safetensors
+COMFYUI_VAE_NAME=ae.safetensors
+COMFYUI_WIDTH=768
+COMFYUI_HEIGHT=768
+COMFYUI_STEPS=4
+COMFYUI_GUIDANCE=3.5
+COMFYUI_MAX_SCENES=3
+```
+
+如果直接在本機跑 .NET，不透過 Docker，Illustrator 的 `ComfyUI:BaseUrl` 預設是：
+
+```text
+http://127.0.0.1:8188
+```
+
+確認 ComfyUI 本機服務：
+
+```bash
+curl -s http://127.0.0.1:8188/system_stats
 ```
 
 ### 使用 UI
@@ -486,8 +523,8 @@ OLLAMA_TIMEOUT_SECONDS=120
 OLLAMA_TEMPERATURE=0.7
 OLLAMA_NUM_PREDICT=2048
 STORYTELLER_OLLAMA_MODEL=hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M
-STORYTELLER_OLLAMA_TIMEOUT_SECONDS=300
-STORYTELLER_OLLAMA_NUM_PREDICT=4096
+STORYTELLER_OLLAMA_TIMEOUT_SECONDS=900
+STORYTELLER_OLLAMA_NUM_PREDICT=8192
 ```
 
 `OLLAMA_MODEL` is the default model. Storyteller overrides it with `STORYTELLER_OLLAMA_MODEL` for story generation.
@@ -502,6 +539,43 @@ Check the local Ollama service:
 
 ```bash
 curl -s http://127.0.0.1:11434/api/tags
+```
+
+### Local ComfyUI / FLUX
+
+ComfyUI is not included in Docker compose. Like Ollama, it is treated as an external AI service. The Illustrator agent calls ComfyUI to generate scene image artifacts.
+
+The Illustrator container calls ComfyUI on the Mac through:
+
+```text
+http://host.docker.internal:8188
+```
+
+The default setup uses FLUX.1 schnell GGUF quantized:
+
+```text
+COMFYUI_BASE_URL=http://host.docker.internal:8188
+COMFYUI_MODEL=flux1-schnell-Q4_K_S.gguf
+COMFYUI_CLIP_NAME1=clip_l.safetensors
+COMFYUI_CLIP_NAME2=t5xxl_fp8_e4m3fn.safetensors
+COMFYUI_VAE_NAME=ae.safetensors
+COMFYUI_WIDTH=768
+COMFYUI_HEIGHT=768
+COMFYUI_STEPS=4
+COMFYUI_GUIDANCE=3.5
+COMFYUI_MAX_SCENES=3
+```
+
+When running .NET directly on the host instead of through Docker, Illustrator's `ComfyUI:BaseUrl` defaults to:
+
+```text
+http://127.0.0.1:8188
+```
+
+Check the local ComfyUI service:
+
+```bash
+curl -s http://127.0.0.1:8188/system_stats
 ```
 
 ### Use The UI

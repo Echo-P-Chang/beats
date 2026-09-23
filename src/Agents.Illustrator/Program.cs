@@ -12,6 +12,7 @@ builder.Services.AddProductionFlows(builder.Configuration);
 builder.Services.AddAzureBlobArtifacts(builder.Configuration);
 builder.Services.AddProductionDatabase(builder.Configuration);
 builder.Services.AddOllamaTextGeneration(builder.Configuration);
+builder.Services.AddComfyUiImageGeneration(builder.Configuration);
 builder.Services.AddRabbitMqMessaging(
     builder.Configuration,
     consumers => consumers.AddFlowConsumersForAgent(builder.Configuration, AgentRoles.Illustrator, typeof(Program).Assembly));

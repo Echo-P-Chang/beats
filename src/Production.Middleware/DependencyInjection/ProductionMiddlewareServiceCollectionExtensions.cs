@@ -128,6 +128,73 @@ public static class ProductionMiddlewareServiceCollectionExtensions
         return services;
     }
 
+    public static IServiceCollection AddComfyUiImageGeneration(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.Configure<ComfyUiOptions>(options =>
+        {
+            var section = configuration.GetSection(ComfyUiOptions.SectionName);
+
+            options.BaseUrl = section[nameof(ComfyUiOptions.BaseUrl)] ?? options.BaseUrl;
+            options.Model = section[nameof(ComfyUiOptions.Model)] ?? options.Model;
+            options.ClipName1 = section[nameof(ComfyUiOptions.ClipName1)] ?? options.ClipName1;
+            options.ClipName2 = section[nameof(ComfyUiOptions.ClipName2)] ?? options.ClipName2;
+            options.VaeName = section[nameof(ComfyUiOptions.VaeName)] ?? options.VaeName;
+            options.SamplerName = section[nameof(ComfyUiOptions.SamplerName)] ?? options.SamplerName;
+            options.Scheduler = section[nameof(ComfyUiOptions.Scheduler)] ?? options.Scheduler;
+
+            if (int.TryParse(section[nameof(ComfyUiOptions.TimeoutSeconds)], out var timeoutSeconds))
+            {
+                options.TimeoutSeconds = timeoutSeconds;
+            }
+
+            if (int.TryParse(section[nameof(ComfyUiOptions.PollIntervalSeconds)], out var pollIntervalSeconds))
+            {
+                options.PollIntervalSeconds = pollIntervalSeconds;
+            }
+
+            if (int.TryParse(section[nameof(ComfyUiOptions.Width)], out var width))
+            {
+                options.Width = width;
+            }
+
+            if (int.TryParse(section[nameof(ComfyUiOptions.Height)], out var height))
+            {
+                options.Height = height;
+            }
+
+            if (int.TryParse(section[nameof(ComfyUiOptions.Steps)], out var steps))
+            {
+                options.Steps = steps;
+            }
+
+            if (double.TryParse(section[nameof(ComfyUiOptions.Cfg)], out var cfg))
+            {
+                options.Cfg = cfg;
+            }
+
+            if (double.TryParse(section[nameof(ComfyUiOptions.Guidance)], out var guidance))
+            {
+                options.Guidance = guidance;
+            }
+
+            if (int.TryParse(section[nameof(ComfyUiOptions.MaxScenes)], out var maxScenes))
+            {
+                options.MaxScenes = maxScenes;
+            }
+        });
+
+        services.AddHttpClient<IImageGenerationClient, ComfyUiImageGenerationClient>((serviceProvider, client) =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<ComfyUiOptions>>().Value;
+            client.BaseAddress = new Uri(options.BaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
+        return services;
+    }
+
     public static IServiceCollection AddRabbitMqMessaging(
         this IServiceCollection services,
         IConfiguration configuration,

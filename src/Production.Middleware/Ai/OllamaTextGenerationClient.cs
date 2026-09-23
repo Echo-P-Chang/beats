@@ -19,13 +19,10 @@ public sealed class OllamaTextGenerationClient(
             throw new ArgumentException("Prompt is required.", nameof(request));
         }
 
-        var prompt = string.IsNullOrWhiteSpace(request.SystemPrompt)
-            ? request.Prompt
-            : $"{request.SystemPrompt.Trim()}\n\n{request.Prompt}";
-
         var ollamaRequest = new OllamaGenerateRequest(
             request.Model ?? _options.Model,
-            prompt,
+            request.Prompt,
+            string.IsNullOrWhiteSpace(request.SystemPrompt) ? null : request.SystemPrompt.Trim(),
             false,
             new OllamaGenerateOptions(
                 request.Temperature ?? _options.Temperature,
@@ -118,6 +115,7 @@ public sealed class OllamaTextGenerationClient(
     private sealed record OllamaGenerateRequest(
         [property: JsonPropertyName("model")] string Model,
         [property: JsonPropertyName("prompt")] string Prompt,
+        [property: JsonPropertyName("system")] string? System,
         [property: JsonPropertyName("stream")] bool Stream,
         [property: JsonPropertyName("options")] OllamaGenerateOptions Options);
 
