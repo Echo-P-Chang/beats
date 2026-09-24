@@ -1,0 +1,246 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 520" role="img" aria-labelledby="title desc">
+  <title id="title">Beats production choreography flow architecture</title>
+  <desc id="desc">Looping animation showing Production API, RabbitMQ Event Bus, and five agents publishing and consuming events in a choreography pipeline.</desc>
+  <style>
+    :root {
+      color-scheme: light;
+    }
+
+    text {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    .title {
+      fill: #182130;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .subtitle {
+      fill: #66758a;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .node {
+      fill: #fff;
+      stroke: #cfd8e6;
+      stroke-width: 2;
+      filter: drop-shadow(0 8px 12px rgba(24, 33, 47, 0.08));
+      animation: nodePulse 12s linear infinite;
+    }
+
+    .api {
+      stroke: #0f766e;
+    }
+
+    .bus {
+      fill: #f8fafc;
+      stroke: #cfd8e6;
+      stroke-width: 2;
+    }
+
+    .bus-label-bg {
+      fill: #f8fafc;
+      stroke: #e2e8f0;
+      stroke-width: 1;
+    }
+
+    .bus-title {
+      fill: #0f766e;
+      font-size: 21px;
+      font-weight: 900;
+    }
+
+    .arrow {
+      fill: none;
+      stroke: #0f766e;
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 12 10;
+      opacity: 0;
+      marker-end: url(#arrowhead);
+      animation: edgePulse 12s linear infinite;
+    }
+
+    .event-tag {
+      fill: #ecfdf5;
+      stroke: #99f6e4;
+      stroke-width: 1;
+      opacity: 0;
+      animation: tagPulse 12s linear infinite;
+    }
+
+    .event-label {
+      fill: #0f3f3a;
+      font-size: 13px;
+      font-weight: 800;
+      opacity: 0;
+      animation: tagPulse 12s linear infinite;
+    }
+
+    .step-1 {
+      animation-delay: 0s;
+    }
+
+    .step-2 {
+      animation-delay: 2s;
+    }
+
+    .step-3 {
+      animation-delay: 4s;
+    }
+
+    .step-4 {
+      animation-delay: 6s;
+    }
+
+    .step-5 {
+      animation-delay: 8s;
+    }
+
+    .step-6 {
+      animation-delay: 10s;
+    }
+
+    .node.step-1 {
+      animation-delay: 0s;
+    }
+
+    .node.step-2 {
+      animation-delay: 2s;
+    }
+
+    .node.step-3 {
+      animation-delay: 4s;
+    }
+
+    .node.step-4 {
+      animation-delay: 6s;
+    }
+
+    .node.step-5 {
+      animation-delay: 8s;
+    }
+
+    .node.step-6 {
+      animation-delay: 10s;
+    }
+
+    @keyframes edgePulse {
+      0% {
+        opacity: 0;
+        stroke-dashoffset: 40;
+      }
+      3% {
+        opacity: 1;
+      }
+      14% {
+        opacity: 1;
+        stroke-dashoffset: 0;
+      }
+      18% {
+        opacity: 0;
+      }
+      100% {
+        opacity: 0;
+      }
+    }
+
+    @keyframes tagPulse {
+      0%, 2% {
+        opacity: 0;
+      }
+      4%, 14% {
+        opacity: 1;
+      }
+      18%, 100% {
+        opacity: 0;
+      }
+    }
+
+    @keyframes nodePulse {
+      0%, 18%, 100% {
+        fill: #fff;
+        stroke-width: 2;
+      }
+      4%, 14% {
+        fill: #f0fdfa;
+        stroke: #0f766e;
+        stroke-width: 4;
+      }
+    }
+  </style>
+
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#0f766e" />
+    </marker>
+  </defs>
+
+  <rect width="1280" height="520" rx="18" fill="#ffffff" />
+  <text x="40" y="44" class="title">Flow Architecture</text>
+  <text x="40" y="68" class="subtitle">Config-driven choreography with RabbitMQ pub-sub events</text>
+
+  <rect class="bus" x="70" y="305" width="1140" height="105" rx="12" />
+  <rect class="bus-label-bg" x="455" y="322" width="370" height="48" rx="10" />
+  <text class="bus-title" x="640" y="348" text-anchor="middle">RabbitMQ Event Bus</text>
+  <text class="subtitle" x="640" y="368" text-anchor="middle">exchanges, queues, and consumer endpoints</text>
+
+  <g>
+    <rect class="node api step-1" x="60" y="118" width="150" height="78" rx="10" />
+    <text class="title" x="135" y="151" text-anchor="middle">Production API</text>
+    <text class="subtitle" x="135" y="173" text-anchor="middle">production-api</text>
+  </g>
+  <g>
+    <rect class="node step-2" x="260" y="118" width="150" height="78" rx="10" />
+    <text class="title" x="335" y="151" text-anchor="middle">Storyteller</text>
+    <text class="subtitle" x="335" y="173" text-anchor="middle">storyteller-agent</text>
+  </g>
+  <g>
+    <rect class="node step-3" x="460" y="118" width="150" height="78" rx="10" />
+    <text class="title" x="535" y="151" text-anchor="middle">Illustrator</text>
+    <text class="subtitle" x="535" y="173" text-anchor="middle">illustrator-agent</text>
+  </g>
+  <g>
+    <rect class="node step-4" x="660" y="118" width="150" height="78" rx="10" />
+    <text class="title" x="735" y="151" text-anchor="middle">Animator</text>
+    <text class="subtitle" x="735" y="173" text-anchor="middle">animator-agent</text>
+  </g>
+  <g>
+    <rect class="node step-5" x="860" y="118" width="150" height="78" rx="10" />
+    <text class="title" x="935" y="151" text-anchor="middle">Editor</text>
+    <text class="subtitle" x="935" y="173" text-anchor="middle">editor-agent</text>
+  </g>
+  <g>
+    <rect class="node step-6" x="1060" y="118" width="150" height="78" rx="10" />
+    <text class="title" x="1135" y="151" text-anchor="middle">Reviewer</text>
+    <text class="subtitle" x="1135" y="173" text-anchor="middle">reviewer-agent</text>
+  </g>
+
+  <path class="arrow step-1" d="M135 196 C135 240,135 278,135 328 L335 328 C335 278,335 240,335 196" />
+  <rect class="event-tag step-1" x="156" y="428" width="158" height="28" rx="8" />
+  <text class="event-label step-1" x="235" y="447" text-anchor="middle">ProductionRequested</text>
+
+  <path class="arrow step-2" d="M335 196 C335 240,335 278,335 342 L535 342 C535 278,535 240,535 196" />
+  <rect class="event-tag step-2" x="378" y="462" width="114" height="28" rx="8" />
+  <text class="event-label step-2" x="435" y="481" text-anchor="middle">StoryCreated</text>
+
+  <path class="arrow step-3" d="M535 196 C535 240,535 278,535 356 L735 356 C735 278,735 240,735 196" />
+  <rect class="event-tag step-3" x="557" y="428" width="156" height="28" rx="8" />
+  <text class="event-label step-3" x="635" y="447" text-anchor="middle">SceneImagesCreated</text>
+
+  <path class="arrow step-4" d="M735 196 C735 240,735 278,735 342 L935 342 C935 278,935 240,935 196" />
+  <rect class="event-tag step-4" x="747" y="462" width="176" height="28" rx="8" />
+  <text class="event-label step-4" x="835" y="481" text-anchor="middle">SceneAnimationsCreated</text>
+
+  <path class="arrow step-5" d="M935 196 C935 240,935 278,935 356 L1135 356 C1135 278,1135 240,1135 196" />
+  <rect class="event-tag step-5" x="962" y="428" width="146" height="28" rx="8" />
+  <text class="event-label step-5" x="1035" y="447" text-anchor="middle">FinalVideoCreated</text>
+
+  <path class="arrow step-6" d="M1135 196 C1135 240,1135 278,1135 342" />
+  <rect class="event-tag step-6" x="1080" y="462" width="110" height="28" rx="8" />
+  <text class="event-label step-6" x="1135" y="481" text-anchor="middle">ReviewPassed</text>
+</svg>

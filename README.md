@@ -21,6 +21,8 @@ Agents.Reviewer
 
 流程採 choreography 架構。每個 agent 只訂閱自己關心的事件，完成自己的工作後寫入 MySQL、產出 artifact 到 Azurite，然後發布下一個事件。
 
+![Flow Architecture](docs/assets/flow-architecture.svg)
+
 ### Flow Config
 
 choreography 流程定義在：
@@ -461,6 +463,8 @@ Agents.Reviewer
 ```
 
 The workflow is choreography-based. Each agent subscribes to the event it cares about, does its own work, writes records to MySQL, writes text artifacts to Azurite, and publishes the next event.
+
+![Flow Architecture](docs/assets/flow-architecture.svg)
 
 ### Requirements
 
