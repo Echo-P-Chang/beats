@@ -50,6 +50,12 @@ public sealed partial class StoryCreatedConsumer(
         var imageArtifacts = new List<SceneArtifact>();
         var manifest = new StringBuilder();
 
+        logger.LogInformation(
+            "{AgentRole} extracted {SceneCount} scene(s). ProductionId={ProductionId}",
+            AgentRoles.Illustrator,
+            scenes.Count,
+            incoming.ProductionId);
+
         manifest.AppendLine($"# Production {incoming.ProductionId}");
         manifest.AppendLine();
         manifest.AppendLine("## Illustrator");
@@ -171,7 +177,7 @@ public sealed partial class StoryCreatedConsumer(
                 : source.Length;
             var body = source[match.Index..nextIndex].Trim();
             var order = index + 1;
-            var title = match.Groups["title"].Value.Trim();
+            var title = CleanSceneTitle(match.Groups["title"].Value);
 
             scenes.Add(new SceneBrief(
                 $"scene-{order:000}",
@@ -233,8 +239,20 @@ public sealed partial class StoryCreatedConsumer(
         return match.Success ? match.Groups["value"].Value.Trim() : null;
     }
 
-    [GeneratedRegex(@"(?m)^###\s*場景(?<number>[一二三四五六七八九十\d]+)[：:\s-]*(?<title>.*)$")]
+    private static string CleanSceneTitle(string title)
+    {
+        var cleaned = SceneTitlePrefixRegex()
+            .Replace(title.Trim(), string.Empty, 1)
+            .Trim();
+
+        return string.IsNullOrWhiteSpace(cleaned) ? title.Trim() : cleaned;
+    }
+
+    [GeneratedRegex(@"(?m)^###\s*(?<title>.+)$")]
     private static partial Regex SceneHeadingRegex();
+
+    [GeneratedRegex(@"^場\S*?[一二三四五六七八九十\d]+[：:\s-]*")]
+    private static partial Regex SceneTitlePrefixRegex();
 
     private sealed record SceneBrief(
         string SceneId,
