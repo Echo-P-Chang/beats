@@ -16,25 +16,32 @@ public sealed class FinalVideoCreatedConsumer(
     IEventPublisher eventPublisher,
     IProductionFlow productionFlow,
     IProductionRepository productionRepository,
-    ILogger<FinalVideoCreatedConsumer> logger) : IConsumer<EventEnvelope<FinalVideoCreatedPayload>>
+    ILogger<FinalVideoCreatedConsumer> logger) : IConsumer<EventEnvelope<CommonPayload>>
 {
-    public async Task Consume(ConsumeContext<EventEnvelope<FinalVideoCreatedPayload>> context)
+    public async Task Consume(ConsumeContext<EventEnvelope<CommonPayload>> context)
     {
         var incoming = context.Message;
+
+        if (!productionFlow.IsSubscribedTo(AgentRoles.Reviewer, incoming.EventType))
+        {
+            return;
+        }
+
         var startedAt = DateTimeOffset.UtcNow;
+        var videoArtifact = GetRequiredArtifact(incoming, "videoUri");
 
         logger.LogInformation(
             "{AgentRole} consumed {EventType}. ProductionId={ProductionId}, Video={VideoArtifact}",
             AgentRoles.Reviewer,
             incoming.EventType,
             incoming.ProductionId,
-            incoming.Payload.Video.Uri);
+            videoArtifact.Uri);
 
         await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
 
         var manuscript = await ArtifactText.ReadAsync(
             artifactStore,
-            incoming.Payload.Video.Uri,
+            videoArtifact.Uri,
             context.CancellationToken);
 
         manuscript += $"""
@@ -66,16 +73,25 @@ public sealed class FinalVideoCreatedConsumer(
             "text/plain",
             "Final reviewed manuscript enriched by the reviewer agent.");
 
-        var payload = new ReviewCompletedPayload(
-            true,
-            artifact,
-            ["Stub review passed. Full quality checks will be implemented later."]);
-
-        var publication = productionFlow.GetRequiredPublication<ReviewCompletedPayload>(
+        var publication = productionFlow.GetRequiredPublication<CommonPayload>(
             AgentRoles.Reviewer,
             incoming.EventType);
 
-        var outgoing = EventEnvelope<ReviewCompletedPayload>.Create(
+        var payload = CommonPayload.Create(
+            publication.EventType,
+            AgentRoles.Reviewer,
+            attributes: new Dictionary<string, string>(incoming.Payload.Attributes)
+            {
+                ["reviewReportUri"] = artifact.Uri,
+                ["reviewPassed"] = bool.TrueString
+            },
+            artifacts: [artifact],
+            data: new Dictionary<string, object?>
+            {
+                ["findings"] = "Stub review passed. Full quality checks will be implemented later."
+            });
+
+        var outgoing = EventEnvelope<CommonPayload>.Create(
             publication.EventType,
             incoming.ProductionId,
             AgentRoles.Reviewer,
@@ -96,7 +112,7 @@ public sealed class FinalVideoCreatedConsumer(
                 AgentRoles.Reviewer,
                 incoming.EventId,
                 outgoing.EventId,
-                incoming.Payload.Video.Uri,
+                videoArtifact.Uri,
                 artifact.Uri,
                 "Completed",
                 startedAt,
@@ -111,5 +127,19 @@ public sealed class FinalVideoCreatedConsumer(
             context.CancellationToken);
 
         await eventPublisher.PublishAsync(outgoing, context.CancellationToken);
+    }
+
+    private static ArtifactReference GetRequiredArtifact(
+        EventEnvelope<CommonPayload> incoming,
+        string outputKey)
+    {
+        if (incoming.Payload.Attributes.TryGetValue(outputKey, out var uri) &&
+            !string.IsNullOrWhiteSpace(uri))
+        {
+            return incoming.Payload.Artifacts.FirstOrDefault(artifact => artifact.Uri == uri) ??
+                new ArtifactReference(uri, "application/octet-stream");
+        }
+
+        return incoming.Payload.Artifacts.First();
     }
 }

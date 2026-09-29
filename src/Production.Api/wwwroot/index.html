@@ -289,9 +289,91 @@
       font-weight: 800;
     }
 
+    .step-heading {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
     .step-role {
       margin-top: 2px;
       font-size: 0.82rem;
+    }
+
+    .artifact-actions {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .artifact-button {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--accent-strong);
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .artifact-button:hover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .artifact-button.has-preview {
+      cursor: zoom-in;
+    }
+
+    .artifact-preview {
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 10px);
+      z-index: 30;
+      width: min(280px, calc(100vw - 48px));
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 18px 45px rgba(24, 33, 47, 0.22);
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 6px);
+      transition: opacity 140ms ease, transform 140ms ease;
+    }
+
+    .artifact-preview img {
+      display: block;
+      width: 100%;
+      max-height: 220px;
+      object-fit: contain;
+      border-radius: 6px;
+      background: #f8fafc;
+    }
+
+    .artifact-preview span {
+      display: block;
+      margin-top: 6px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .artifact-button.has-preview:hover .artifact-preview,
+    .artifact-button.has-preview:focus .artifact-preview,
+    .artifact-button.has-preview:focus-visible .artifact-preview {
+      opacity: 1;
+      transform: translate(-50%, 0);
     }
 
     .lookup {
@@ -496,6 +578,7 @@
         </div>
       </div>
       <nav class="links" aria-label="Runtime links">
+        <a class="link-button" href="/flow-designer.html">Flow Designer</a>
         <a class="link-button" href="/health" target="_blank" rel="noreferrer">Health</a>
         <a class="link-button" href="http://localhost:15672" target="_blank" rel="noreferrer">RabbitMQ</a>
       </nav>
@@ -706,8 +789,11 @@
         }
 
 	        const production = await response.json();
-	        const events = await fetchProductionEvents(id);
-	        renderStatus(production, events);
+	        const [events, artifacts] = await Promise.all([
+	          fetchProductionEvents(id),
+	          fetchProductionArtifacts(id)
+	        ]);
+	        renderStatus(production, events, artifacts);
 	        setMessage("");
 
         if (!finalStatuses.has(production.status)) {
@@ -736,7 +822,17 @@
 	      return await response.json();
 	    }
 
-		    function renderStatus(production, events = []) {
+	    async function fetchProductionArtifacts(id) {
+	      const response = await fetch(`/productions/${encodeURIComponent(id)}/artifacts`);
+
+	      if (!response.ok) {
+	        throw new Error(await response.text());
+	      }
+
+	      return await response.json();
+	    }
+
+		    function renderStatus(production, events = [], artifacts = []) {
 		      const status = production.status || "Requested";
 		      const stepIndex = statusToStepIndex(status);
 		      const isFinal = finalStatuses.has(status);
@@ -768,7 +864,8 @@
 	          ${steps.map((step, index) => renderStep(
 	            step,
 	            hasEvents ? eventTypes.has(step[0]) : index <= stepIndex,
-	            events.find((event) => event.eventType === step[0]))).join("")}
+	            events.find((event) => event.eventType === step[0]),
+	            artifacts)).join("")}
 	        </div>
 	      `;
 
@@ -840,17 +937,72 @@
       `;
     }
 
-	    function renderStep(step, done, event) {
+	    function renderStep(step, done, event, artifacts = []) {
+	      const stepArtifacts = event
+	        ? artifacts.filter((artifact) => artifact.agentRole === event.producer && artifact.downloadUrl)
+	        : [];
+
 	      return `
 	        <div class="step ${done ? "done" : ""}">
 	          <div class="dot">${done ? "✓" : "-"}</div>
-	          <div>
-	            <div class="step-title">${escapeHtml(step[0])}</div>
+	          <div class="step-main">
+	            <div class="step-heading">
+	              <div class="step-title">${escapeHtml(step[0])}</div>
+	              ${renderArtifactButtons(stepArtifacts)}
+	            </div>
 	            <div class="step-role">${escapeHtml(event ? `${step[1]} · ${formatTime(event.createdAt)}` : step[1])}</div>
 	          </div>
 	        </div>
 	      `;
     }
+
+	    function renderArtifactButtons(artifacts) {
+	      if (artifacts.length === 0) {
+	        return "";
+	      }
+
+	      return `
+	        <span class="artifact-actions">
+	          ${artifacts.map((artifact, index) => `
+	            <a
+	              class="artifact-button ${isImageArtifact(artifact) ? "has-preview" : ""}"
+	              href="${escapeAttribute(artifact.downloadUrl)}"
+	              download="${escapeAttribute(artifactFileName(artifact))}"
+	              title="${escapeAttribute(artifact.description || artifact.mediaType || "Download artifact")}">
+	              ${escapeHtml(artifacts.length === 1 ? "Download" : `Download ${index + 1}`)}
+	              ${renderArtifactPreview(artifact)}
+	            </a>
+	          `).join("")}
+	        </span>
+	      `;
+	    }
+
+	    function renderArtifactPreview(artifact) {
+	      if (!isImageArtifact(artifact)) {
+	        return "";
+	      }
+
+	      const fileName = artifactFileName(artifact);
+
+	      return `
+	        <span class="artifact-preview" aria-hidden="true">
+	          <img src="${escapeAttribute(artifact.downloadUrl)}" alt="" loading="lazy">
+	          <span>${escapeHtml(fileName)}</span>
+	        </span>
+	      `;
+	    }
+
+	    function isImageArtifact(artifact) {
+	      return Boolean(artifact.downloadUrl) &&
+	        String(artifact.mediaType || "").toLowerCase().startsWith("image/");
+	    }
+
+	    function artifactFileName(artifact) {
+	      const path = artifact.artifactPath || "";
+	      const fileName = path.split("/").filter(Boolean).at(-1);
+
+	      return fileName || "artifact.txt";
+	    }
 
 	    function statusToStepIndex(status) {
 	      const map = {
@@ -1066,6 +1218,10 @@
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value);
     }
   </script>
 </body>

@@ -31,6 +31,14 @@ public sealed class ProductionFlow : IProductionFlow
         return GetAgentFlow(agentRole).Publications;
     }
 
+    public bool IsSubscribedTo(
+        string agentRole,
+        string eventType)
+    {
+        return GetSubscriptions(agentRole).Any(subscription =>
+            string.Equals(subscription.EventType, eventType, StringComparison.OrdinalIgnoreCase));
+    }
+
     public FlowPublication GetRequiredPublication<TPayload>(
         string agentRole,
         string? afterEventType = null)

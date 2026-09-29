@@ -16,23 +16,29 @@ public sealed class SceneAnimationsCreatedConsumer(
     IEventPublisher eventPublisher,
     IProductionFlow productionFlow,
     IProductionRepository productionRepository,
-    ILogger<SceneAnimationsCreatedConsumer> logger) : IConsumer<EventEnvelope<SceneAnimationsCreatedPayload>>
+    ILogger<SceneAnimationsCreatedConsumer> logger) : IConsumer<EventEnvelope<CommonPayload>>
 {
-    public async Task Consume(ConsumeContext<EventEnvelope<SceneAnimationsCreatedPayload>> context)
+    public async Task Consume(ConsumeContext<EventEnvelope<CommonPayload>> context)
     {
         var incoming = context.Message;
+
+        if (!productionFlow.IsSubscribedTo(AgentRoles.Editor, incoming.EventType))
+        {
+            return;
+        }
+
         var startedAt = DateTimeOffset.UtcNow;
+        var inputArtifact = incoming.Payload.Artifacts.First();
 
         logger.LogInformation(
             "{AgentRole} consumed {EventType}. ProductionId={ProductionId}, AnimationCount={AnimationCount}",
             AgentRoles.Editor,
             incoming.EventType,
             incoming.ProductionId,
-            incoming.Payload.Animations.Count);
+            incoming.Payload.Attributes.TryGetValue("animationCount", out var count) ? count : incoming.Payload.Artifacts.Count);
 
         await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
 
-        var inputArtifact = incoming.Payload.Animations[0].Artifact;
         var manuscript = await ArtifactText.ReadAsync(
             artifactStore,
             inputArtifact.Uri,
@@ -63,15 +69,21 @@ public sealed class SceneAnimationsCreatedConsumer(
             "text/plain",
             "Manuscript enriched with edit and voiceover direction by the editor agent.");
 
-        var payload = new FinalVideoCreatedPayload(
-            artifact,
-            artifact);
-
-        var publication = productionFlow.GetRequiredPublication<FinalVideoCreatedPayload>(
+        var publication = productionFlow.GetRequiredPublication<CommonPayload>(
             AgentRoles.Editor,
             incoming.EventType);
 
-        var outgoing = EventEnvelope<FinalVideoCreatedPayload>.Create(
+        var payload = CommonPayload.Create(
+            publication.EventType,
+            AgentRoles.Editor,
+            attributes: new Dictionary<string, string>(incoming.Payload.Attributes)
+            {
+                ["videoUri"] = artifact.Uri,
+                ["voiceOverUri"] = artifact.Uri
+            },
+            artifacts: [artifact]);
+
+        var outgoing = EventEnvelope<CommonPayload>.Create(
             publication.EventType,
             incoming.ProductionId,
             AgentRoles.Editor,

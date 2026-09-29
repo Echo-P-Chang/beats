@@ -8,6 +8,7 @@ using Beats.Production.Middleware.Artifacts;
 using Beats.Production.Middleware.Eventing;
 using Beats.Production.Middleware.Persistence;
 using MassTransit;
+using System.Text;
 
 namespace Beats.Agents.Animator;
 
@@ -16,44 +17,52 @@ public sealed class SceneImagesCreatedConsumer(
     IEventPublisher eventPublisher,
     IProductionFlow productionFlow,
     IProductionRepository productionRepository,
-    ILogger<SceneImagesCreatedConsumer> logger) : IConsumer<EventEnvelope<SceneImagesCreatedPayload>>
+    ILogger<SceneImagesCreatedConsumer> logger) : IConsumer<EventEnvelope<CommonPayload>>
 {
-    public async Task Consume(ConsumeContext<EventEnvelope<SceneImagesCreatedPayload>> context)
+    public async Task Consume(ConsumeContext<EventEnvelope<CommonPayload>> context)
     {
         var incoming = context.Message;
+
+        if (!productionFlow.IsSubscribedTo(AgentRoles.Animator, incoming.EventType))
+        {
+            return;
+        }
+
         var startedAt = DateTimeOffset.UtcNow;
+        var imageArtifacts = incoming.Payload.Artifacts
+            .Where(artifact => artifact.MediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
 
         logger.LogInformation(
             "{AgentRole} consumed {EventType}. ProductionId={ProductionId}, ImageCount={ImageCount}",
             AgentRoles.Animator,
             incoming.EventType,
             incoming.ProductionId,
-            incoming.Payload.Images.Count);
+            imageArtifacts.Length);
 
         await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
 
-        var inputArtifact = incoming.Payload.Images[0].Artifact;
-        var manuscript = await ArtifactText.ReadAsync(
-            artifactStore,
-            inputArtifact.Uri,
-            context.CancellationToken);
+        var inputArtifact = imageArtifacts.FirstOrDefault();
+        var manuscript = new StringBuilder();
 
-        manuscript += $"""
+        manuscript.AppendLine($"# Production {incoming.ProductionId}");
+        manuscript.AppendLine();
+        manuscript.AppendLine("## Animator");
+        manuscript.AppendLine("Motion plan:");
+        manuscript.AppendLine("The animator received image artifacts and creates timing language for each scene.");
+        manuscript.AppendLine();
+        manuscript.AppendLine("Scene animation placeholders:");
 
-
-            ## Animator
-            Motion plan:
-            The animator converts the visual notes into timing language. Each scene receives camera movement, transition rhythm, and animation intent while preserving the same text artifact.
-
-            Animation placeholders:
-            - scene-001: Slow push-in, light page-turn transition, 8 seconds.
-            - scene-002: Gentle parallax, character focus, 10 seconds.
-            - scene-003: Hold on final composition, soft fade, 7 seconds.
-            """;
+        for (var index = 0; index < imageArtifacts.Length; index++)
+        {
+            var image = imageArtifacts[index];
+            manuscript.AppendLine($"- scene-{index + 1:000}: Slow parallax push-in, gentle camera drift, soft transition, 8 seconds.");
+            manuscript.AppendLine($"  Source image: {image.Uri}");
+        }
 
         var artifactUri = await ArtifactText.SaveAsync(
             artifactStore,
-            manuscript,
+            manuscript.ToString(),
             $"productions/{incoming.ProductionId}/03-animator/manuscript.txt",
             context.CancellationToken);
 
@@ -62,18 +71,21 @@ public sealed class SceneImagesCreatedConsumer(
             "text/plain",
             "Manuscript enriched with motion direction by the animator agent.");
 
-        var payload = new SceneAnimationsCreatedPayload([
-            new SceneArtifact(
-                "scene-001",
-                artifact,
-                1)
-        ]);
-
-        var publication = productionFlow.GetRequiredPublication<SceneAnimationsCreatedPayload>(
+        var publication = productionFlow.GetRequiredPublication<CommonPayload>(
             AgentRoles.Animator,
             incoming.EventType);
 
-        var outgoing = EventEnvelope<SceneAnimationsCreatedPayload>.Create(
+        var payload = CommonPayload.Create(
+            publication.EventType,
+            AgentRoles.Animator,
+            attributes: new Dictionary<string, string>(incoming.Payload.Attributes)
+            {
+                ["animationPlanUri"] = artifact.Uri,
+                ["animationCount"] = "1"
+            },
+            artifacts: [artifact]);
+
+        var outgoing = EventEnvelope<CommonPayload>.Create(
             publication.EventType,
             incoming.ProductionId,
             AgentRoles.Animator,
@@ -94,7 +106,7 @@ public sealed class SceneImagesCreatedConsumer(
                 AgentRoles.Animator,
                 incoming.EventId,
                 outgoing.EventId,
-                inputArtifact.Uri,
+                inputArtifact?.Uri,
                 artifact.Uri,
                 "Completed",
                 startedAt,

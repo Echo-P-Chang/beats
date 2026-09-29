@@ -33,9 +33,13 @@ public static class ProductionFlowServiceCollectionExtensions
             throw new InvalidOperationException($"No production flow is registered for agent role '{agentRole}'.");
         }
 
-        foreach (var subscription in flow.Subscriptions)
+        var consumerTypes = flow.Subscriptions
+            .Select(subscription => FindConsumerType(agentAssembly, subscription))
+            .Distinct()
+            .ToArray();
+
+        foreach (var consumerType in consumerTypes)
         {
-            var consumerType = FindConsumerType(agentAssembly, subscription);
             registration.AddConsumer(consumerType);
         }
     }

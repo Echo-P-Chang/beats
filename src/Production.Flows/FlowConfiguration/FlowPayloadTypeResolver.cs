@@ -7,12 +7,7 @@ internal static class FlowPayloadTypeResolver
     private static readonly IReadOnlyDictionary<string, Type> PayloadTypes =
         new[]
         {
-            typeof(ProductionRequestedPayload),
-            typeof(StoryCreatedPayload),
-            typeof(SceneImagesCreatedPayload),
-            typeof(SceneAnimationsCreatedPayload),
-            typeof(FinalVideoCreatedPayload),
-            typeof(ReviewCompletedPayload)
+            typeof(CommonPayload)
         }
         .SelectMany(type => new[]
         {
@@ -30,5 +25,13 @@ internal static class FlowPayloadTypeResolver
 
         throw new InvalidOperationException(
             $"Unknown flow payload type '{payloadType}'. Use one of: {string.Join(", ", PayloadTypes.Keys.Order())}.");
+    }
+
+    public static IReadOnlyList<string> GetKnownPayloadTypeNames()
+    {
+        return PayloadTypes.Keys
+            .Where(name => !name.Contains('.', StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
     }
 }

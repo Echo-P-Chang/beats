@@ -1,0 +1,2053 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Beats Flow Designer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --ink: #18212f;
+      --muted: #627086;
+      --line: #d9e0ea;
+      --accent: #0f766e;
+      --accent-strong: #115e59;
+      --accent-soft: #dff7f3;
+      --danger: #b91c1c;
+      --danger-soft: #fee2e2;
+      --warn: #9a3412;
+      --warn-soft: #ffedd5;
+      --ok: #166534;
+      --ok-soft: #dcfce7;
+      --shadow: 0 12px 30px rgba(24, 33, 47, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    button,
+    .link-button {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      padding: 8px 12px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    button:hover,
+    .link-button:hover {
+      border-color: var(--accent);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+      font-weight: 800;
+    }
+
+    .primary:hover {
+      background: var(--accent-strong);
+    }
+
+    .danger {
+      color: var(--danger);
+    }
+
+    .shell {
+      width: min(1440px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 48px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mark {
+      display: grid;
+      width: 38px;
+      height: 38px;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 800;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.2;
+    }
+
+    h1 {
+      font-size: clamp(1.25rem, 2vw, 1.7rem);
+    }
+
+    h2 {
+      font-size: 1rem;
+    }
+
+    h3 {
+      font-size: 0.88rem;
+    }
+
+    .subtitle {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .links,
+    .toolbar,
+    .inline-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .links {
+      justify-content: flex-end;
+    }
+
+    .toolbar {
+      margin-bottom: 18px;
+    }
+
+    .designer-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .main-stack {
+      display: grid;
+      gap: 18px;
+      min-width: 0;
+    }
+
+    .side-stack {
+      display: grid;
+      gap: 18px;
+      min-width: 0;
+    }
+
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding: 16px 18px;
+    }
+
+    .panel-body {
+      padding: 18px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      border-radius: 999px;
+      background: #eef2f7;
+      color: var(--muted);
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .status-pill.ok {
+      background: var(--ok-soft);
+      color: var(--ok);
+    }
+
+    .status-pill.warn {
+      background: var(--warn-soft);
+      color: var(--warn);
+    }
+
+    .status-pill.error {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .canvas-wrap {
+      overflow-x: auto;
+      padding: 10px 12px 16px;
+    }
+
+    .architecture-note {
+      margin: 0;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      padding: 12px 18px;
+      font-size: 0.88rem;
+      font-weight: 750;
+      line-height: 1.5;
+    }
+
+    .event-board {
+      min-width: 1120px;
+    }
+
+    .flow-map {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      min-height: 390px;
+      padding: 10px;
+    }
+
+    .flow-step {
+      display: grid;
+      flex: 0 0 250px;
+      grid-template-rows: minmax(74px, auto) 24px minmax(118px, auto) 24px minmax(112px, auto);
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    }
+
+    .flow-step:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    .flow-step.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+    }
+
+    .flow-service-group {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+      padding: 10px;
+    }
+
+    .flow-label {
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .event-node {
+      display: grid;
+      align-content: center;
+      min-width: 0;
+      min-height: 112px;
+      border: 2px solid var(--accent);
+      border-radius: 8px;
+      background: var(--accent-soft);
+      padding: 12px;
+      text-align: center;
+    }
+
+    .event-type-name {
+      overflow-wrap: anywhere;
+      font-size: 1rem;
+      font-weight: 950;
+    }
+
+    .event-payload {
+      margin-top: 6px;
+      color: var(--accent-strong);
+      font-size: 0.82rem;
+      font-weight: 850;
+      overflow-wrap: anywhere;
+    }
+
+    .flow-down {
+      position: relative;
+      min-height: 24px;
+    }
+
+    .flow-down::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 6px;
+      width: 2px;
+      background: var(--accent);
+      transform: translateX(-50%);
+    }
+
+    .flow-down::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      border-top: 7px solid var(--accent);
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      transform: translateX(-50%);
+    }
+
+    .flow-connector {
+      position: relative;
+      display: grid;
+      flex: 0 0 82px;
+      align-self: center;
+      min-height: 48px;
+      place-items: center;
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .flow-connector::before {
+      content: "";
+      position: absolute;
+      left: 8px;
+      right: 14px;
+      top: 50%;
+      height: 2px;
+      background: var(--accent);
+      transform: translateY(-50%);
+    }
+
+    .flow-connector::after {
+      content: "";
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      border-left: 8px solid var(--accent);
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      transform: translateY(-50%);
+    }
+
+    .flow-connector span {
+      position: relative;
+      z-index: 1;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 2px 6px;
+      white-space: nowrap;
+    }
+
+    .agent-chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .agent-chip {
+      display: inline-flex;
+      min-height: 28px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      padding: 4px 8px;
+      font-size: 0.76rem;
+      font-weight: 850;
+      text-align: left;
+      white-space: normal;
+    }
+
+    .agent-chip.publisher {
+      border-color: #bfdbfe;
+      background: #eff6ff;
+    }
+
+    .agent-chip.subscriber {
+      border-color: var(--accent);
+      background: #fff;
+      color: var(--accent-strong);
+    }
+
+    .subscriber-adder {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .event-catalog {
+      display: grid;
+      gap: 10px;
+    }
+
+    .payload-catalog {
+      display: grid;
+      gap: 10px;
+    }
+
+    .event-catalog-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+      padding: 10px;
+    }
+
+    .event-profile-wide {
+      grid-column: 1 / -1;
+    }
+
+    .profile-list {
+      min-height: 82px;
+      resize: vertical;
+    }
+
+    .payload-row {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.8fr) minmax(240px, 1fr) minmax(220px, 1fr);
+      gap: 10px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+      padding: 10px;
+    }
+
+    .payload-name {
+      overflow-wrap: anywhere;
+      font-weight: 900;
+    }
+
+    .payload-events {
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-weight: 800;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .schema-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .schema-field {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px;
+    }
+
+    .schema-field strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.82rem;
+    }
+
+    .schema-field span {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 750;
+      line-height: 1.45;
+    }
+
+    .fixed-payload {
+      display: flex;
+      align-items: center;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+      color: var(--accent-strong);
+      padding: 8px 10px;
+      font-weight: 850;
+    }
+
+    .event-catalog-meta {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+
+    .schema-details summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      list-style: none;
+      cursor: pointer;
+      border-bottom: 1px solid var(--line);
+      padding: 16px 18px;
+    }
+
+    .schema-details summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .schema-details summary::after {
+      content: "+";
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--accent-strong);
+      font-weight: 900;
+    }
+
+    .schema-details[open] summary::after {
+      content: "-";
+    }
+
+    .agent-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .agent-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px 12px;
+      text-align: left;
+    }
+
+    .agent-item.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .agent-name {
+      overflow-wrap: anywhere;
+      font-weight: 900;
+    }
+
+    .agent-count {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 800;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      padding: 9px 10px;
+      outline: none;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .editor-section {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .flow-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+      padding: 10px;
+    }
+
+    .publication-row {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+    }
+
+    .icon-button {
+      display: grid;
+      width: 38px;
+      min-width: 38px;
+      height: 38px;
+      place-items: center;
+      padding: 0;
+      font-size: 1.05rem;
+      font-weight: 900;
+    }
+
+    .empty {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      padding: 14px;
+      text-align: center;
+    }
+
+    .code-view {
+      min-height: 380px;
+      max-height: 560px;
+      margin: 0;
+      overflow: auto;
+      border: 0;
+      border-radius: 0 0 8px 8px;
+      background: #101827;
+      color: #e6edf7;
+      padding: 18px;
+      font: 0.82rem/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      white-space: pre;
+      resize: vertical;
+      tab-size: 2;
+    }
+
+    .validation-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .validation-list li {
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--muted);
+      background: #f8fafc;
+      overflow-wrap: anywhere;
+      font-size: 0.88rem;
+    }
+
+    .validation-list li.error {
+      color: var(--danger);
+      background: var(--danger-soft);
+      font-weight: 700;
+    }
+
+    .validation-list li.warn {
+      color: var(--warn);
+      background: var(--warn-soft);
+      font-weight: 700;
+    }
+
+    .note {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.5;
+    }
+
+    .message {
+      min-height: 22px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .side-stack .flow-row,
+    .side-stack .publication-row {
+      grid-template-columns: 1fr;
+    }
+
+    .side-stack .icon-button {
+      width: 100%;
+    }
+
+    @media (max-width: 1040px) {
+      .designer-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        width: min(100% - 20px, 1440px);
+        padding-top: 18px;
+      }
+
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .links {
+        justify-content: flex-start;
+      }
+
+      .flow-row,
+      .publication-row,
+      .event-catalog-row,
+      .payload-row,
+      .subscriber-adder {
+        grid-template-columns: 1fr;
+      }
+
+      .icon-button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="topbar" aria-labelledby="page-title">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">B</div>
+        <div>
+          <h1 id="page-title">Beats Flow Designer</h1>
+          <p class="subtitle">Visual editor for production-flow.json</p>
+        </div>
+      </div>
+      <nav class="links" aria-label="Designer links">
+        <a class="link-button" href="/">Production Console</a>
+        <a class="link-button" href="/production-flow" target="_blank" rel="noreferrer">Raw JSON</a>
+        <a class="link-button" href="/health" target="_blank" rel="noreferrer">Health</a>
+      </nav>
+    </section>
+
+    <section class="toolbar" aria-label="Flow designer actions">
+      <span class="status-pill" id="file-pill">Loading</span>
+      <span class="status-pill" id="dirty-pill">Clean</span>
+      <span class="status-pill" id="validation-pill">Not Validated</span>
+      <button type="button" id="reload-button">Reload</button>
+      <button type="button" id="validate-button">Validate</button>
+      <button type="button" id="export-button">Export JSON</button>
+    </section>
+
+    <section class="designer-layout">
+      <div class="main-stack">
+        <section class="panel" aria-labelledby="canvas-title">
+          <div class="panel-header">
+            <h2 id="canvas-title">Event Flow Architecture</h2>
+            <span class="status-pill" id="summary-pill">0 events</span>
+          </div>
+          <p class="architecture-note">
+            Follow the flow from left to right: each event node shows which service publishes it, which services subscribe to it, and which follow-up event can be published next.
+          </p>
+          <div class="canvas-wrap">
+            <div class="event-board" id="event-board" aria-label="Event flow architecture"></div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="events-title">
+          <div class="panel-header">
+            <h2 id="events-title">Event Types</h2>
+            <button type="button" id="add-event-button">Add Event</button>
+          </div>
+          <div class="panel-body">
+            <div class="event-catalog" id="event-catalog"></div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="json-title">
+          <div class="panel-header">
+            <h2 id="json-title">production-flow.json Preview</h2>
+            <span class="status-pill warn">Preview Only</span>
+          </div>
+          <textarea class="code-view" id="json-preview" spellcheck="false" readonly></textarea>
+        </section>
+
+        <details class="panel schema-details" aria-labelledby="payloads-title">
+          <summary>
+            <h2 id="payloads-title">CommonPayload Schema</h2>
+            <span class="status-pill" id="selected-event-pill">No Event Selected</span>
+          </summary>
+          <div class="panel-body">
+            <div class="payload-catalog" id="payload-catalog"></div>
+            <p class="note">All events use CommonPayload. Event-specific data should be carried through Attributes, Artifacts, and Data while the worker subscribes by event type.</p>
+          </div>
+        </details>
+      </div>
+
+      <aside class="side-stack">
+        <section class="panel" aria-labelledby="agents-title">
+          <div class="panel-header">
+            <h2 id="agents-title">Agents</h2>
+            <button type="button" id="add-agent-button">Add Agent</button>
+          </div>
+          <div class="panel-body">
+            <div class="agent-list" id="agent-list"></div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="inspector-title">
+          <div class="panel-header">
+            <h2 id="inspector-title">Inspector</h2>
+            <button class="danger" type="button" id="remove-agent-button">Remove</button>
+          </div>
+          <div class="panel-body" id="inspector"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="validation-title">
+          <div class="panel-header">
+            <h2 id="validation-title">Validation</h2>
+            <span class="status-pill" id="validation-count-pill">0 issues</span>
+          </div>
+          <div class="panel-body">
+            <ul class="validation-list" id="validation-list"></ul>
+            <p class="note">Subscription changes are design-time only here. Runtime consumer registration still requires restarting the affected agent services.</p>
+          </div>
+        </section>
+      </aside>
+    </section>
+
+    <datalist id="event-type-options"></datalist>
+  </main>
+
+  <script>
+    const COMMON_PAYLOAD_TYPE = "CommonPayload";
+
+    const state = {
+      configPath: "",
+      flow: { agentFlows: [], edges: [], eventTypes: [], eventProfiles: [], payloadTypes: [], warnings: [] },
+      selectedAgentIndex: 0,
+      selectedEventType: "",
+      originalJson: "",
+      validationErrors: [],
+      validationWarnings: [],
+      validateTimer: 0
+    };
+
+    const elements = {
+      filePill: document.getElementById("file-pill"),
+      dirtyPill: document.getElementById("dirty-pill"),
+      validationPill: document.getElementById("validation-pill"),
+      validationCountPill: document.getElementById("validation-count-pill"),
+      summaryPill: document.getElementById("summary-pill"),
+      selectedEventPill: document.getElementById("selected-event-pill"),
+      eventBoard: document.getElementById("event-board"),
+      eventCatalog: document.getElementById("event-catalog"),
+      payloadCatalog: document.getElementById("payload-catalog"),
+      jsonPreview: document.getElementById("json-preview"),
+      agentList: document.getElementById("agent-list"),
+      inspector: document.getElementById("inspector"),
+      validationList: document.getElementById("validation-list"),
+      eventTypeOptions: document.getElementById("event-type-options"),
+      reloadButton: document.getElementById("reload-button"),
+      validateButton: document.getElementById("validate-button"),
+      exportButton: document.getElementById("export-button"),
+      addAgentButton: document.getElementById("add-agent-button"),
+      addEventButton: document.getElementById("add-event-button"),
+      removeAgentButton: document.getElementById("remove-agent-button")
+    };
+
+    elements.reloadButton.addEventListener("click", loadFlow);
+    elements.validateButton.addEventListener("click", () => validateCurrentFlow());
+    elements.exportButton.addEventListener("click", exportJson);
+    elements.addAgentButton.addEventListener("click", addAgent);
+    elements.addEventButton.addEventListener("click", addEvent);
+    elements.removeAgentButton.addEventListener("click", removeSelectedAgent);
+
+    loadFlow();
+
+    async function loadFlow() {
+      setStatus("Loading", "warn");
+
+      try {
+        const response = await fetch("/production-flow/designer");
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error((payload.validation?.errors || ["Flow designer data could not be loaded."]).join("\n"));
+        }
+
+        state.configPath = payload.configPath;
+        state.flow = normalizeFlow(payload.flow);
+        state.selectedAgentIndex = 0;
+        state.selectedEventType = "";
+        recomputeEventTypes();
+        recomputeEdges();
+        syncEventProfiles();
+        state.originalJson = buildJson();
+        state.validationErrors = payload.validation?.errors || [];
+        state.validationWarnings = payload.flow?.warnings || [];
+        render();
+      } catch (error) {
+        state.validationErrors = [error.message];
+        state.validationWarnings = [];
+        renderValidation();
+        setStatus("Load Failed", "error");
+      }
+    }
+
+    function normalizeFlow(flow) {
+      return {
+        agentFlows: (flow?.agentFlows || []).map(agent => ({
+          agentRole: agent.agentRole || "",
+          subscriptions: (agent.subscriptions || []).map(subscription => ({
+            eventType: subscription.eventType || "",
+            payloadType: COMMON_PAYLOAD_TYPE
+          })),
+          publications: (agent.publications || []).map(publication => ({
+            eventType: publication.eventType || "",
+            payloadType: COMMON_PAYLOAD_TYPE,
+            afterEventType: publication.afterEventType || ""
+          }))
+        })),
+        edges: flow?.edges || [],
+        eventTypes: flow?.eventTypes || [],
+        eventProfiles: (flow?.eventProfiles || []).map(profile => ({
+          eventType: profile.eventType || "",
+          stage: profile.stage || "",
+          attributes: normalizeList(profile.attributes?.length ? profile.attributes : [
+            ...(profile.inputs || []),
+            ...(profile.outputs || [])
+          ]),
+          artifacts: normalizeList(profile.artifacts),
+          data: normalizeList(profile.data)
+        })),
+        payloadTypes: [COMMON_PAYLOAD_TYPE],
+        warnings: flow?.warnings || []
+      };
+    }
+
+    function render() {
+      clampSelection();
+      recomputeEventTypes();
+      recomputeEdges();
+      syncEventProfiles();
+      clampSelectedEvent();
+      renderPills();
+      renderEventOptions();
+      renderAgentList();
+      renderInspector();
+      renderEventBoard();
+      renderEventCatalog();
+      renderPayloadCatalog();
+      renderJsonPreview();
+      renderValidation();
+    }
+
+    function renderPills() {
+      const currentJson = buildJson();
+      const dirty = currentJson !== state.originalJson;
+
+      elements.filePill.textContent = state.configPath ? state.configPath.split("/").slice(-2).join("/") : "No file";
+      elements.dirtyPill.textContent = dirty ? "Unsaved Changes" : "Clean";
+      elements.dirtyPill.className = `status-pill ${dirty ? "warn" : "ok"}`;
+
+      elements.summaryPill.textContent = `${state.flow.eventTypes.length} events / ${state.flow.edges.length} links`;
+      elements.selectedEventPill.textContent = state.selectedEventType || "No Event Selected";
+
+      const issueCount = state.validationErrors.length + state.validationWarnings.length;
+      elements.validationCountPill.textContent = `${issueCount} issue${issueCount === 1 ? "" : "s"}`;
+      elements.validationCountPill.className = `status-pill ${state.validationErrors.length > 0 ? "error" : issueCount > 0 ? "warn" : "ok"}`;
+
+      if (state.validationErrors.length > 0) {
+        elements.validationPill.textContent = "Invalid";
+        elements.validationPill.className = "status-pill error";
+      } else if (state.validationWarnings.length > 0) {
+        elements.validationPill.textContent = "Valid With Warnings";
+        elements.validationPill.className = "status-pill warn";
+      } else {
+        elements.validationPill.textContent = "Valid";
+        elements.validationPill.className = "status-pill ok";
+      }
+    }
+
+    function renderEventOptions() {
+      elements.eventTypeOptions.innerHTML = state.flow.eventTypes
+        .map(eventType => `<option value="${escapeAttribute(eventType)}"></option>`)
+        .join("");
+    }
+
+    function renderAgentList() {
+      if (state.flow.agentFlows.length === 0) {
+        elements.agentList.innerHTML = '<div class="empty">No agents in this flow.</div>';
+        return;
+      }
+
+      elements.agentList.innerHTML = state.flow.agentFlows.map((agent, index) => `
+        <button class="agent-item ${index === state.selectedAgentIndex ? "active" : ""}" type="button" data-agent-index="${index}">
+          <span>
+            <span class="agent-name">${escapeHtml(agent.agentRole || "(unnamed agent)")}</span>
+            <span class="agent-count">${agent.subscriptions.length} subscriptions / ${agent.publications.length} publications</span>
+          </span>
+        </button>
+      `).join("");
+
+      elements.agentList.querySelectorAll("[data-agent-index]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.selectedAgentIndex = Number(button.dataset.agentIndex);
+          render();
+        });
+      });
+    }
+
+    function renderInspector() {
+      const agent = state.flow.agentFlows[state.selectedAgentIndex];
+      elements.removeAgentButton.disabled = !agent;
+
+      if (!agent) {
+        elements.inspector.innerHTML = '<div class="empty">Select or add an agent to edit the flow.</div>';
+        return;
+      }
+
+      elements.inspector.innerHTML = `
+        <div class="field">
+          <label for="agent-role">Agent Role</label>
+          <input id="agent-role" value="${escapeAttribute(agent.agentRole)}" autocomplete="off">
+        </div>
+
+        <div class="editor-section">
+          <div class="inline-actions">
+            <h3>Subscriptions</h3>
+            <button type="button" id="add-subscription-button">Add Subscription</button>
+          </div>
+          <div id="subscription-rows">
+            ${renderSubscriptionRows(agent)}
+          </div>
+        </div>
+
+        <div class="editor-section">
+          <div class="inline-actions">
+            <h3>Publications</h3>
+            <button type="button" id="add-publication-button">Add Publication</button>
+          </div>
+          <div id="publication-rows">
+            ${renderPublicationRows(agent)}
+          </div>
+        </div>
+      `;
+
+      elements.inspector.querySelector("#agent-role").addEventListener("input", event => {
+        agent.agentRole = event.target.value;
+        scheduleUpdate();
+      });
+
+      elements.inspector.querySelector("#add-subscription-button").addEventListener("click", () => {
+        agent.subscriptions.push({
+          eventType: "",
+          payloadType: COMMON_PAYLOAD_TYPE
+        });
+        scheduleUpdate(true);
+      });
+
+      elements.inspector.querySelector("#add-publication-button").addEventListener("click", () => {
+        agent.publications.push({
+          eventType: "",
+          payloadType: COMMON_PAYLOAD_TYPE,
+          afterEventType: ""
+        });
+        scheduleUpdate(true);
+      });
+
+      bindRowEditors(agent);
+    }
+
+    function renderSubscriptionRows(agent) {
+      if (agent.subscriptions.length === 0) {
+        return '<div class="empty">This agent does not subscribe to any event.</div>';
+      }
+
+      return agent.subscriptions.map((subscription, index) => `
+        <div class="flow-row" data-subscription-index="${index}">
+          <div>
+            <label>Event Type</label>
+            <input data-field="eventType" list="event-type-options" value="${escapeAttribute(subscription.eventType)}" autocomplete="off">
+          </div>
+          <div>
+            <label>Payload Type</label>
+            ${renderFixedPayload()}
+          </div>
+          <button class="icon-button danger" type="button" data-remove-subscription="${index}" title="Remove subscription" aria-label="Remove subscription">x</button>
+        </div>
+      `).join("");
+    }
+
+    function renderPublicationRows(agent) {
+      if (agent.publications.length === 0) {
+        return '<div class="empty">This agent does not publish any event.</div>';
+      }
+
+      return agent.publications.map((publication, index) => `
+        <div class="flow-row publication-row" data-publication-index="${index}">
+          <div>
+            <label>Event Type</label>
+            <input data-field="eventType" list="event-type-options" value="${escapeAttribute(publication.eventType)}" autocomplete="off">
+          </div>
+          <div>
+            <label>Payload Type</label>
+            ${renderFixedPayload()}
+          </div>
+          <div>
+            <label>After Event Type</label>
+            <input data-field="afterEventType" list="event-type-options" value="${escapeAttribute(publication.afterEventType || "")}" autocomplete="off">
+          </div>
+          <button class="icon-button danger" type="button" data-remove-publication="${index}" title="Remove publication" aria-label="Remove publication">x</button>
+        </div>
+      `).join("");
+    }
+
+    function renderFixedPayload() {
+      return `<div class="fixed-payload">${COMMON_PAYLOAD_TYPE}</div>`;
+    }
+
+    function bindRowEditors(agent) {
+      elements.inspector.querySelectorAll("[data-subscription-index]").forEach(row => {
+        const index = Number(row.dataset.subscriptionIndex);
+
+        row.querySelectorAll("[data-field]").forEach(input => {
+          input.addEventListener("input", () => {
+            agent.subscriptions[index][input.dataset.field] = input.value;
+            scheduleUpdate();
+          });
+          input.addEventListener("change", () => {
+            agent.subscriptions[index][input.dataset.field] = input.value;
+            scheduleUpdate();
+          });
+        });
+      });
+
+      elements.inspector.querySelectorAll("[data-publication-index]").forEach(row => {
+        const index = Number(row.dataset.publicationIndex);
+
+        row.querySelectorAll("[data-field]").forEach(input => {
+          input.addEventListener("input", () => {
+            agent.publications[index][input.dataset.field] = input.value;
+            scheduleUpdate();
+          });
+          input.addEventListener("change", () => {
+            agent.publications[index][input.dataset.field] = input.value;
+            scheduleUpdate();
+          });
+        });
+      });
+
+      elements.inspector.querySelectorAll("[data-remove-subscription]").forEach(button => {
+        button.addEventListener("click", () => {
+          agent.subscriptions.splice(Number(button.dataset.removeSubscription), 1);
+          scheduleUpdate(true);
+        });
+      });
+
+      elements.inspector.querySelectorAll("[data-remove-publication]").forEach(button => {
+        button.addEventListener("click", () => {
+          agent.publications.splice(Number(button.dataset.removePublication), 1);
+          scheduleUpdate(true);
+        });
+      });
+    }
+
+    function renderEventBoard() {
+      const events = getEventModels();
+
+      if (events.length === 0) {
+        elements.eventBoard.innerHTML = '<div class="empty">No events in this flow. Add an event to the selected agent.</div>';
+        return;
+      }
+
+      elements.eventBoard.innerHTML = `
+        <div class="flow-map">
+          ${events.map((event, index) => {
+        const publisherMarkup = event.publishers.length === 0
+          ? '<div class="empty">No publisher</div>'
+          : `<div class="agent-chip-list">${event.publishers.map(publisher => `
+              <button class="agent-chip publisher" type="button" data-select-agent="${publisher.agentIndex}">
+                ${escapeHtml(publisher.agentRole)}
+              </button>
+            `).join("")}</div>`;
+
+        const subscriberMarkup = event.subscribers.length === 0
+          ? '<div class="empty">No subscribers</div>'
+          : `<div class="agent-chip-list">${event.subscribers.map(subscriber => `
+              <button class="agent-chip subscriber" type="button" data-select-agent="${subscriber.agentIndex}">
+                ${escapeHtml(subscriber.agentRole)}
+              </button>
+            `).join("")}</div>`;
+
+        const candidateOptions = event.availableSubscribers.map(agent => `
+          <option value="${agent.index}">${escapeHtml(agent.agentRole || "(unnamed agent)")}</option>
+        `).join("");
+        const connectorMarkup = index < events.length - 1
+          ? '<div class="flow-connector" aria-hidden="true"><span>next</span></div>'
+          : "";
+
+        return `
+          <article class="flow-step ${equalsIgnoreCase(event.eventType, state.selectedEventType) ? "selected" : ""}" data-event-type="${escapeAttribute(event.eventType)}">
+            <div class="flow-service-group">
+              <div class="flow-label">Published by</div>
+              ${publisherMarkup}
+            </div>
+            <div class="flow-down" aria-hidden="true"></div>
+            <div class="event-node">
+              <div class="flow-label">Event</div>
+              <div class="event-type-name">${escapeHtml(event.eventType || "(unnamed event)")}</div>
+              <div class="event-payload">${escapeHtml(event.payloadType || "(no payload type)")}</div>
+              ${event.afterEventTypes.length > 0
+                ? `<p class="note">After: ${escapeHtml(event.afterEventTypes.join(", "))}</p>`
+                : ""}
+            </div>
+            <div class="flow-down" aria-hidden="true"></div>
+            <div class="flow-service-group">
+              <div class="flow-label">Subscribed by</div>
+              ${subscriberMarkup}
+              <div class="subscriber-adder">
+                <select data-subscriber-select="${escapeAttribute(event.eventType)}" ${event.availableSubscribers.length === 0 ? "disabled" : ""}>
+                  <option value="">Add subscriber...</option>
+                  ${candidateOptions}
+                </select>
+                <button type="button" data-add-subscriber="${escapeAttribute(event.eventType)}" ${event.availableSubscribers.length === 0 ? "disabled" : ""}>Add</button>
+              </div>
+            </div>
+          </article>
+          ${connectorMarkup}
+        `;
+      }).join("")}
+        </div>
+      `;
+
+      bindEventBoard();
+    }
+
+    function bindEventBoard() {
+      elements.eventBoard.querySelectorAll("[data-event-type]").forEach(card => {
+        card.addEventListener("click", event => {
+          if (event.target.closest("button, select, input, textarea")) {
+            return;
+          }
+
+          selectEvent(card.dataset.eventType);
+        });
+      });
+
+      elements.eventBoard.querySelectorAll("[data-select-agent]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.selectedAgentIndex = Number(button.dataset.selectAgent);
+          render();
+        });
+      });
+
+      elements.eventBoard.querySelectorAll("[data-add-subscriber]").forEach(button => {
+        button.addEventListener("click", () => {
+          const eventType = button.dataset.addSubscriber;
+          const select = Array.from(elements.eventBoard.querySelectorAll("[data-subscriber-select]"))
+            .find(candidate => candidate.dataset.subscriberSelect === eventType);
+          const agentIndex = Number(select?.value);
+
+          if (Number.isNaN(agentIndex)) {
+            return;
+          }
+
+          addSubscriberToEvent(eventType, agentIndex);
+        });
+      });
+    }
+
+    function renderEventCatalog() {
+      const events = getEventModels();
+
+      if (events.length === 0) {
+        elements.eventCatalog.innerHTML = '<div class="empty">No event types are available yet.</div>';
+        return;
+      }
+
+      const event = events.find(candidate => equalsIgnoreCase(candidate.eventType, state.selectedEventType));
+
+      if (!event) {
+        elements.eventCatalog.innerHTML = '<div class="empty">Select an event from Event Flow Architecture to edit its profile.</div>';
+        return;
+      }
+
+      const profile = getEventProfile(event.eventType);
+
+      elements.eventCatalog.innerHTML = `
+        <div class="event-catalog-row" data-catalog-event="${escapeAttribute(event.eventType)}">
+          <div>
+            <label>Event Type</label>
+            <input data-event-rename="${escapeAttribute(event.eventType)}" value="${escapeAttribute(event.eventType)}" autocomplete="off">
+          </div>
+          <div>
+            <label>Stage</label>
+            <input data-profile-event="${escapeAttribute(event.eventType)}" data-profile-field="stage" value="${escapeAttribute(profile.stage)}" autocomplete="off">
+          </div>
+          <div>
+            <label>Attributes</label>
+            <textarea class="profile-list" data-profile-event="${escapeAttribute(event.eventType)}" data-profile-field="attributes" spellcheck="false">${escapeHtml(formatList(profile.attributes))}</textarea>
+          </div>
+          <div>
+            <label>Artifacts</label>
+            <textarea class="profile-list" data-profile-event="${escapeAttribute(event.eventType)}" data-profile-field="artifacts" spellcheck="false">${escapeHtml(formatList(profile.artifacts))}</textarea>
+          </div>
+          <div>
+            <label>Data</label>
+            <textarea class="profile-list" data-profile-event="${escapeAttribute(event.eventType)}" data-profile-field="data" spellcheck="false">${escapeHtml(formatList(profile.data))}</textarea>
+          </div>
+          <div class="event-catalog-meta">
+            ${event.publishers.length} publisher${event.publishers.length === 1 ? "" : "s"}<br>
+            ${event.subscribers.length} subscriber${event.subscribers.length === 1 ? "" : "s"}
+          </div>
+        </div>
+      `;
+
+      elements.eventCatalog.querySelectorAll("[data-event-rename]").forEach(input => {
+        input.addEventListener("focus", () => {
+          selectEvent(input.dataset.eventRename, false);
+        });
+
+        input.addEventListener("change", () => {
+          renameEventType(input.dataset.eventRename, input.value.trim());
+        });
+      });
+
+      elements.eventCatalog.querySelectorAll("[data-profile-event]").forEach(input => {
+        input.addEventListener("focus", () => {
+          selectEvent(input.dataset.profileEvent, false);
+        });
+
+        input.addEventListener("input", () => {
+          updateEventProfile(input.dataset.profileEvent, input.dataset.profileField, input.value);
+        });
+      });
+
+      elements.eventCatalog.querySelectorAll("[data-catalog-event]").forEach(row => {
+        row.addEventListener("click", event => {
+          if (event.target.closest("input, button, select, textarea")) {
+            return;
+          }
+
+          selectEvent(row.dataset.catalogEvent);
+        });
+      });
+    }
+
+    function renderPayloadCatalog() {
+      const events = getEventModels();
+      const selectedEvent = events.find(event => equalsIgnoreCase(event.eventType, state.selectedEventType));
+      const eventNames = events.length === 0
+        ? "No events use CommonPayload yet"
+        : events.map(event => event.eventType).join(", ");
+
+      elements.payloadCatalog.innerHTML = `
+        <div class="payload-row">
+          <div>
+            <div class="payload-name">${COMMON_PAYLOAD_TYPE}</div>
+            <span class="status-pill ok">Runtime Payload</span>
+          </div>
+          <div class="payload-events">
+            Used by: ${escapeHtml(eventNames)}
+          </div>
+          <div class="payload-events">
+            ${selectedEvent
+              ? `Selected event: ${escapeHtml(selectedEvent.eventType)}`
+              : "Select an event to inspect how it uses the common payload."}
+          </div>
+        </div>
+
+        <div class="schema-grid">
+          <div class="schema-field">
+            <strong>EventType</strong>
+            <span>Runtime event name. Workers subscribe and route by this value.</span>
+          </div>
+          <div class="schema-field">
+            <strong>Stage</strong>
+            <span>Producer stage or agent role, such as storyteller-agent.</span>
+          </div>
+          <div class="schema-field">
+            <strong>Attributes</strong>
+            <span>String key/value context carried across the event flow, such as prompt, style, storyUri, imageCount, or videoUri.</span>
+          </div>
+          <div class="schema-field">
+            <strong>Artifacts</strong>
+            <span>Artifact references produced by the stage. These power downloads and downstream file access.</span>
+          </div>
+          <div class="schema-field">
+            <strong>Data</strong>
+            <span>Flexible JSON-compatible metadata for details that do not deserve a new contract class.</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function selectEvent(eventType, rerender = true) {
+      state.selectedEventType = eventType || "";
+
+      if (rerender) {
+        render();
+        return;
+      }
+
+      renderPills();
+      renderEventBoard();
+      renderPayloadCatalog();
+    }
+
+    function renderJsonPreview() {
+      elements.jsonPreview.value = buildJson();
+    }
+
+    function renderValidation() {
+      const items = [
+        ...state.validationErrors.map(message => ({ kind: "error", message })),
+        ...state.validationWarnings.map(message => ({ kind: "warn", message }))
+      ];
+
+      if (items.length === 0) {
+        elements.validationList.innerHTML = '<li>Flow config is valid.</li>';
+        return;
+      }
+
+      elements.validationList.innerHTML = items
+        .map(item => `<li class="${item.kind}">${escapeHtml(item.message)}</li>`)
+        .join("");
+    }
+
+    function scheduleUpdate(rebuildInspector = false) {
+      recomputeEventTypes();
+      recomputeEdges();
+      syncEventProfiles();
+      clampSelectedEvent();
+      renderPills();
+      renderEventOptions();
+      renderAgentList();
+      renderEventBoard();
+      renderEventCatalog();
+      renderPayloadCatalog();
+      renderJsonPreview();
+
+      if (rebuildInspector) {
+        renderInspector();
+      }
+
+      window.clearTimeout(state.validateTimer);
+      state.validateTimer = window.setTimeout(() => validateCurrentFlow(false), 300);
+    }
+
+    async function validateCurrentFlow(showStatus = true) {
+      if (showStatus) {
+        setStatus("Validating", "warn");
+      }
+
+      try {
+        const response = await fetch("/production-flow/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: buildJson()
+        });
+        const result = await response.json();
+
+        state.validationErrors = result.errors || [];
+        recomputeWarnings();
+        renderPills();
+        renderValidation();
+
+        if (showStatus) {
+          setStatus(result.isValid ? "Validated" : "Invalid", result.isValid ? "ok" : "error");
+        }
+      } catch (error) {
+        state.validationErrors = [error.message];
+        renderPills();
+        renderValidation();
+        if (showStatus) {
+          setStatus("Validate Failed", "error");
+        }
+      }
+    }
+
+    function addAgent() {
+      state.flow.agentFlows.push({
+        agentRole: `new-agent-${state.flow.agentFlows.length + 1}`,
+        subscriptions: [],
+        publications: []
+      });
+      state.selectedAgentIndex = state.flow.agentFlows.length - 1;
+      scheduleUpdate(true);
+    }
+
+    function addEvent() {
+      if (state.flow.agentFlows.length === 0) {
+        addAgent();
+      }
+
+      const agent = state.flow.agentFlows[state.selectedAgentIndex];
+      const eventType = nextEventType();
+
+      agent.publications.push({
+        eventType,
+        payloadType: COMMON_PAYLOAD_TYPE,
+        afterEventType: ""
+      });
+
+      state.selectedEventType = eventType;
+      scheduleUpdate(true);
+    }
+
+    function addSubscriberToEvent(eventType, agentIndex) {
+      const agent = state.flow.agentFlows[agentIndex];
+
+      if (!agent || !eventType) {
+        return;
+      }
+
+      const alreadySubscribed = agent.subscriptions.some(subscription =>
+        equalsIgnoreCase(subscription.eventType, eventType));
+
+      if (alreadySubscribed) {
+        return;
+      }
+
+      agent.subscriptions.push({
+        eventType,
+        payloadType: COMMON_PAYLOAD_TYPE
+      });
+
+      state.selectedAgentIndex = agentIndex;
+      scheduleUpdate(true);
+    }
+
+    function updateEventProfile(eventType, field, value) {
+      const profile = getEventProfile(eventType);
+
+      if (!profile || !field) {
+        return;
+      }
+
+      if (field === "stage") {
+        profile.stage = value;
+      } else {
+        profile[field] = parseList(value);
+      }
+
+      renderPills();
+      renderJsonPreview();
+      window.clearTimeout(state.validateTimer);
+      state.validateTimer = window.setTimeout(() => validateCurrentFlow(false), 300);
+    }
+
+    function renameEventType(oldEventType, newEventType) {
+      if (!oldEventType || !newEventType || equalsIgnoreCase(oldEventType, newEventType)) {
+        renderEventCatalog();
+        return;
+      }
+
+      state.flow.agentFlows.forEach(agent => {
+        agent.subscriptions.forEach(subscription => {
+          if (equalsIgnoreCase(subscription.eventType, oldEventType)) {
+            subscription.eventType = newEventType;
+          }
+        });
+
+        agent.publications.forEach(publication => {
+          if (equalsIgnoreCase(publication.eventType, oldEventType)) {
+            publication.eventType = newEventType;
+          }
+
+          if (publication.afterEventType && equalsIgnoreCase(publication.afterEventType, oldEventType)) {
+            publication.afterEventType = newEventType;
+          }
+        });
+      });
+
+      const profile = state.flow.eventProfiles.find(candidate =>
+        equalsIgnoreCase(candidate.eventType, oldEventType));
+
+      if (profile) {
+        profile.eventType = newEventType;
+      }
+
+      if (equalsIgnoreCase(state.selectedEventType, oldEventType)) {
+        state.selectedEventType = newEventType;
+      }
+
+      scheduleUpdate(true);
+    }
+
+    function removeSelectedAgent() {
+      if (state.selectedAgentIndex < 0 || state.selectedAgentIndex >= state.flow.agentFlows.length) {
+        return;
+      }
+
+      state.flow.agentFlows.splice(state.selectedAgentIndex, 1);
+      clampSelection();
+      scheduleUpdate(true);
+    }
+
+    function exportJson() {
+      const blob = new Blob([buildJson()], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "production-flow.json";
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function buildJson() {
+      syncEventProfiles();
+
+      return JSON.stringify({
+        agentFlows: state.flow.agentFlows.map(agent => ({
+          agentRole: agent.agentRole,
+          subscriptions: agent.subscriptions.map(subscription => ({
+            eventType: subscription.eventType,
+            payloadType: COMMON_PAYLOAD_TYPE
+          })),
+          publications: agent.publications.map(publication => ({
+            eventType: publication.eventType,
+            payloadType: COMMON_PAYLOAD_TYPE,
+            ...(publication.afterEventType ? { afterEventType: publication.afterEventType } : {})
+          }))
+        })),
+        eventProfiles: getNormalizedEventProfiles().map(profile => ({
+          eventType: profile.eventType,
+          stage: profile.stage,
+          attributes: profile.attributes,
+          artifacts: profile.artifacts,
+          data: profile.data
+        }))
+      }, null, 2);
+    }
+
+    function syncEventProfiles() {
+      const profilesByKey = new Map((state.flow.eventProfiles || [])
+        .filter(profile => profile.eventType)
+        .map(profile => [profile.eventType.toLowerCase(), {
+          eventType: profile.eventType,
+          stage: profile.stage || "",
+          attributes: normalizeList(profile.attributes),
+          artifacts: normalizeList(profile.artifacts),
+          data: normalizeList(profile.data)
+        }]));
+
+      state.flow.eventProfiles = state.flow.eventTypes.map(eventType => {
+        const key = eventType.toLowerCase();
+        const existing = profilesByKey.get(key);
+
+        if (existing) {
+          existing.eventType = eventType;
+          return existing;
+        }
+
+        return defaultEventProfile(eventType);
+      });
+    }
+
+    function getEventProfile(eventType) {
+      syncEventProfiles();
+      return state.flow.eventProfiles.find(profile => equalsIgnoreCase(profile.eventType, eventType))
+        || defaultEventProfile(eventType);
+    }
+
+    function getNormalizedEventProfiles() {
+      syncEventProfiles();
+      return state.flow.eventProfiles.map(profile => ({
+        eventType: profile.eventType,
+        stage: profile.stage || "",
+        attributes: normalizeList(profile.attributes),
+        artifacts: normalizeList(profile.artifacts),
+        data: normalizeList(profile.data)
+      }));
+    }
+
+    function defaultEventProfile(eventType) {
+      const publisher = inferPublisherStage(eventType);
+      const defaults = {
+        ProductionRequested: {
+          stage: "production-api",
+          attributes: ["prompt", "style", "targetWordCount", "durationSeconds"],
+          artifacts: [],
+          data: []
+        },
+        StoryCreated: {
+          stage: "storyteller-agent",
+          attributes: ["prompt", "style", "targetWordCount", "durationSeconds", "storyUri", "scenesUri"],
+          artifacts: ["manuscript"],
+          data: ["model", "finishReason", "validation"]
+        },
+        SceneImagesCreated: {
+          stage: "illustrator-agent",
+          attributes: ["prompt", "style", "targetWordCount", "durationSeconds", "storyUri", "scenesUri", "manifestUri", "imageCount"],
+          artifacts: ["sceneImages"],
+          data: ["comfyUiModel", "maxScenes"]
+        },
+        SceneAnimationsCreated: {
+          stage: "animator-agent",
+          attributes: ["prompt", "style", "targetWordCount", "durationSeconds", "manifestUri", "imageCount", "animationPlanUri", "animationCount"],
+          artifacts: ["animationPlan"],
+          data: []
+        },
+        FinalVideoCreated: {
+          stage: "editor-agent",
+          attributes: ["prompt", "style", "targetWordCount", "durationSeconds", "animationPlanUri", "animationCount", "videoUri", "voiceOverUri"],
+          artifacts: ["finalVideoManifest"],
+          data: []
+        },
+        ReviewPassed: {
+          stage: "reviewer-agent",
+          attributes: ["prompt", "style", "targetWordCount", "durationSeconds", "videoUri", "voiceOverUri", "reviewReportUri", "reviewPassed"],
+          artifacts: ["reviewReport"],
+          data: ["findings"]
+        }
+      };
+      const profile = defaults[eventType] || {
+        stage: publisher,
+        attributes: [],
+        artifacts: [],
+        data: []
+      };
+
+      return {
+        eventType,
+        stage: profile.stage || publisher,
+        attributes: [...profile.attributes],
+        artifacts: [...profile.artifacts],
+        data: [...profile.data]
+      };
+    }
+
+    function inferPublisherStage(eventType) {
+      const agent = state.flow.agentFlows.find(candidate =>
+        candidate.publications.some(publication => equalsIgnoreCase(publication.eventType, eventType)));
+
+      return agent?.agentRole || "";
+    }
+
+    function normalizeList(values) {
+      if (!Array.isArray(values)) {
+        return [];
+      }
+
+      return values
+        .map(value => String(value || "").trim())
+        .filter(Boolean);
+    }
+
+    function parseList(value) {
+      return String(value || "")
+        .split(/\r?\n|,/)
+        .map(item => item.trim())
+        .filter(Boolean);
+    }
+
+    function formatList(values) {
+      return normalizeList(values).join("\n");
+    }
+
+    function getEventModels() {
+      const eventMap = new Map();
+
+      state.flow.agentFlows.forEach((agent, agentIndex) => {
+        agent.publications.forEach((publication, publicationIndex) => {
+          const event = ensureEventModel(eventMap, publication.eventType);
+          event.publishers.push({
+            agentIndex,
+            publicationIndex,
+            agentRole: agent.agentRole || "(unnamed agent)"
+          });
+
+          if (!event.payloadType && publication.payloadType) {
+            event.payloadType = publication.payloadType;
+          }
+
+          if (publication.afterEventType &&
+              !event.afterEventTypes.some(value => equalsIgnoreCase(value, publication.afterEventType))) {
+            event.afterEventTypes.push(publication.afterEventType);
+          }
+        });
+
+        agent.subscriptions.forEach((subscription, subscriptionIndex) => {
+          const event = ensureEventModel(eventMap, subscription.eventType);
+          event.subscribers.push({
+            agentIndex,
+            subscriptionIndex,
+            agentRole: agent.agentRole || "(unnamed agent)"
+          });
+
+          if (!event.payloadType && subscription.payloadType) {
+            event.payloadType = subscription.payloadType;
+          }
+        });
+      });
+
+      const events = sortEventModels(Array.from(eventMap.values())
+        .filter(event => event.eventType));
+
+      events.forEach(event => {
+        const subscriberIndexes = new Set(event.subscribers.map(subscriber => subscriber.agentIndex));
+        event.availableSubscribers = state.flow.agentFlows
+          .map((agent, index) => ({ index, agentRole: agent.agentRole }))
+          .filter(agent => !subscriberIndexes.has(agent.index));
+      });
+
+      return events;
+    }
+
+    function sortEventModels(events) {
+      const eventByKey = new Map(events.map(event => [event.eventType.toLowerCase(), event]));
+      const originalIndex = new Map(events.map((event, index) => [event.eventType.toLowerCase(), index]));
+      const dependencies = new Map(events.map(event => [event.eventType.toLowerCase(), new Set()]));
+      const dependents = new Map(events.map(event => [event.eventType.toLowerCase(), new Set()]));
+
+      events.forEach(event => {
+        const eventKey = event.eventType.toLowerCase();
+
+        event.afterEventTypes.forEach(afterEventType => {
+          const afterKey = afterEventType.toLowerCase();
+
+          if (!eventByKey.has(afterKey)) {
+            return;
+          }
+
+          dependencies.get(eventKey).add(afterKey);
+          dependents.get(afterKey).add(eventKey);
+        });
+      });
+
+      const queue = events
+        .filter(event => dependencies.get(event.eventType.toLowerCase()).size === 0)
+        .sort((left, right) => originalIndex.get(left.eventType.toLowerCase()) - originalIndex.get(right.eventType.toLowerCase()));
+      const sorted = [];
+
+      while (queue.length > 0) {
+        const event = queue.shift();
+        const eventKey = event.eventType.toLowerCase();
+        sorted.push(event);
+
+        Array.from(dependents.get(eventKey))
+          .sort((left, right) => originalIndex.get(left) - originalIndex.get(right))
+          .forEach(dependentKey => {
+            dependencies.get(dependentKey).delete(eventKey);
+
+            if (dependencies.get(dependentKey).size === 0) {
+              queue.push(eventByKey.get(dependentKey));
+            }
+          });
+      }
+
+      if (sorted.length !== events.length) {
+        return events;
+      }
+
+      return sorted;
+    }
+
+    function ensureEventModel(eventMap, eventType) {
+      const key = (eventType || "").toLowerCase();
+
+      if (!eventMap.has(key)) {
+        eventMap.set(key, {
+          eventType: eventType || "",
+          payloadType: "",
+          afterEventTypes: [],
+          publishers: [],
+          subscribers: [],
+          availableSubscribers: []
+        });
+      }
+
+      return eventMap.get(key);
+    }
+
+    function nextEventType() {
+      const existing = new Set(state.flow.eventTypes.map(eventType => eventType.toLowerCase()));
+      let index = state.flow.eventTypes.length + 1;
+      let candidate = `NewEvent${index}`;
+
+      while (existing.has(candidate.toLowerCase())) {
+        index += 1;
+        candidate = `NewEvent${index}`;
+      }
+
+      return candidate;
+    }
+
+    function recomputeEventTypes() {
+      const events = new Set();
+
+      state.flow.agentFlows.forEach(agent => {
+        agent.subscriptions.forEach(subscription => {
+          if (subscription.eventType.trim()) {
+            events.add(subscription.eventType.trim());
+          }
+        });
+        agent.publications.forEach(publication => {
+          if (publication.eventType.trim()) {
+            events.add(publication.eventType.trim());
+          }
+        });
+      });
+
+      state.flow.eventTypes = Array.from(events).sort((a, b) => a.localeCompare(b));
+    }
+
+    function recomputeEdges() {
+      const edges = [];
+
+      state.flow.agentFlows.forEach(source => {
+        source.publications.forEach(publication => {
+          const subscribers = state.flow.agentFlows.filter(agent =>
+            agent.subscriptions.some(subscription =>
+              subscription.eventType &&
+              publication.eventType &&
+              subscription.eventType.toLowerCase() === publication.eventType.toLowerCase()));
+
+          if (subscribers.length === 0) {
+            edges.push({
+              sourceAgentRole: source.agentRole,
+              targetAgentRole: null,
+              eventType: publication.eventType,
+              payloadType: publication.payloadType,
+              afterEventType: publication.afterEventType || null
+            });
+            return;
+          }
+
+          subscribers.forEach(target => {
+            edges.push({
+              sourceAgentRole: source.agentRole,
+              targetAgentRole: target.agentRole,
+              eventType: publication.eventType,
+              payloadType: publication.payloadType,
+              afterEventType: publication.afterEventType || null
+            });
+          });
+        });
+      });
+
+      state.flow.edges = edges;
+      recomputeWarnings();
+    }
+
+    function recomputeWarnings() {
+      state.validationWarnings = state.flow.edges
+        .filter(edge => !edge.targetAgentRole && edge.eventType)
+        .map(edge => `Event '${edge.eventType}' is published by '${edge.sourceAgentRole}' but has no subscriber.`);
+    }
+
+    function clampSelection() {
+      if (state.flow.agentFlows.length === 0) {
+        state.selectedAgentIndex = -1;
+        return;
+      }
+
+      state.selectedAgentIndex = Math.max(0, Math.min(state.selectedAgentIndex, state.flow.agentFlows.length - 1));
+    }
+
+    function clampSelectedEvent() {
+      const events = getEventModels();
+
+      if (events.length === 0) {
+        state.selectedEventType = "";
+        return;
+      }
+
+      if (state.selectedEventType &&
+          !events.some(event => equalsIgnoreCase(event.eventType, state.selectedEventType))) {
+        state.selectedEventType = "";
+      }
+    }
+
+    function setStatus(text, kind) {
+      elements.validationPill.textContent = text;
+      elements.validationPill.className = `status-pill ${kind}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value);
+    }
+
+    function escapeSvgText(value) {
+      return escapeHtml(value);
+    }
+
+    function truncate(value, maxLength) {
+      const text = String(value);
+      return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
+    }
+
+    function equalsIgnoreCase(left, right) {
+      return String(left || "").toLowerCase() === String(right || "").toLowerCase();
+    }
+  </script>
+</body>
+</html>

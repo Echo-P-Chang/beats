@@ -4,87 +4,164 @@ using Beats.Production.Contracts.Events.Payloads;
 using Beats.Production.Flows;
 using Beats.Production.Contracts.Media;
 using Beats.Production.Contracts.Productions;
+using Beats.Production.Middleware.Ai;
 using Beats.Production.Middleware.Artifacts;
 using Beats.Production.Middleware.Eventing;
 using Beats.Production.Middleware.Persistence;
 using MassTransit;
+using Microsoft.Extensions.Options;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Beats.Agents.Illustrator;
 
-public sealed class StoryCreatedConsumer(
+public sealed partial class StoryCreatedConsumer(
     IArtifactStore artifactStore,
     IEventPublisher eventPublisher,
+    IImageGenerationClient imageGenerationClient,
+    IOptions<ComfyUiOptions> comfyUiOptions,
     IProductionFlow productionFlow,
     IProductionRepository productionRepository,
-    ILogger<StoryCreatedConsumer> logger) : IConsumer<EventEnvelope<StoryCreatedPayload>>
+    ILogger<StoryCreatedConsumer> logger) : IConsumer<EventEnvelope<CommonPayload>>
 {
-    public async Task Consume(ConsumeContext<EventEnvelope<StoryCreatedPayload>> context)
+    private readonly ComfyUiOptions _comfyUiOptions = comfyUiOptions.Value;
+
+    public async Task Consume(ConsumeContext<EventEnvelope<CommonPayload>> context)
     {
         var incoming = context.Message;
+
+        if (!productionFlow.IsSubscribedTo(AgentRoles.Illustrator, incoming.EventType))
+        {
+            return;
+        }
+
         var startedAt = DateTimeOffset.UtcNow;
+        var storyArtifact = GetRequiredArtifact(incoming, "storyUri");
 
         logger.LogInformation(
             "{AgentRole} consumed {EventType}. ProductionId={ProductionId}, Scenes={ScenesArtifact}",
             AgentRoles.Illustrator,
             incoming.EventType,
             incoming.ProductionId,
-            incoming.Payload.Scenes.Uri);
+            storyArtifact.Uri);
 
         await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
 
         var manuscript = await ArtifactText.ReadAsync(
             artifactStore,
-            incoming.Payload.Story.Uri,
+            storyArtifact.Uri,
             context.CancellationToken);
 
-        manuscript += $"""
+        var scenes = ExtractScenes(manuscript, _comfyUiOptions.MaxScenes);
+        var style = ExtractManuscriptValue(manuscript, "Style") ?? "watercolor storybook";
+        var imageArtifacts = new List<SceneArtifact>();
+        var manifest = new StringBuilder();
 
+        logger.LogInformation(
+            "{AgentRole} extracted {SceneCount} scene(s). ProductionId={ProductionId}",
+            AgentRoles.Illustrator,
+            scenes.Count,
+            incoming.ProductionId);
 
-            ## Illustrator
-            Visual direction:
-            The illustrator keeps the artifact as text for now, but adds a consistent visual language: watercolor storybook, soft contrast, warm key light, recurring blue-gold accents, and clear scene notes for each major beat.
+        manifest.AppendLine($"# Production {incoming.ProductionId}");
+        manifest.AppendLine();
+        manifest.AppendLine("## Illustrator");
+        manifest.AppendLine($"Source story artifact: {storyArtifact.Uri}");
+        manifest.AppendLine($"ComfyUI model: {_comfyUiOptions.Model}");
+        manifest.AppendLine($"Style: {style}");
+        manifest.AppendLine();
+        manifest.AppendLine("Generated scene images:");
 
-            Scene image placeholders:
-            - scene-001: Establishing shot with the protagonist entering the story world.
-            - scene-002: Emotional midpoint with stronger color contrast.
-            - scene-003: Closing image with visual resolution.
-            """;
+        foreach (var scene in scenes)
+        {
+            logger.LogInformation(
+                "{AgentRole} generating image for {SceneId}. ProductionId={ProductionId}",
+                AgentRoles.Illustrator,
+                scene.SceneId,
+                incoming.ProductionId);
 
-        var artifactUri = await ArtifactText.SaveAsync(
+            var image = await imageGenerationClient.GenerateAsync(
+                new ImageGenerationRequest(
+                    BuildImagePrompt(scene, style),
+                    NegativePrompt: "text, watermark, logo, signature, blurry, low quality, extra fingers, deformed hands, distorted face",
+                    FileNamePrefix: $"beats-{incoming.ProductionId:N}-{scene.SceneId}"),
+                context.CancellationToken);
+
+            await using var imageStream = new MemoryStream(image.Content);
+            var imageUri = await artifactStore.SaveAsync(
+                imageStream,
+                $"productions/{incoming.ProductionId}/02-illustrator/{scene.SceneId}.png",
+                image.MediaType,
+                context.CancellationToken);
+
+            var imageArtifact = new ArtifactReference(
+                imageUri,
+                image.MediaType,
+                $"{scene.Title}. Generated by Illustrator with ComfyUI FLUX quantized. PromptId={image.PromptId}.");
+
+            imageArtifacts.Add(new SceneArtifact(scene.SceneId, imageArtifact, scene.Order));
+
+            await productionRepository.RecordArtifactAsync(
+                incoming.ProductionId,
+                AgentRoles.Illustrator,
+                imageArtifact,
+                context.CancellationToken);
+
+            manifest.AppendLine($"- {scene.SceneId}: {scene.Title}");
+            manifest.AppendLine($"  Artifact: {imageUri}");
+            manifest.AppendLine($"  ComfyUI file: {image.FileName}");
+            manifest.AppendLine($"  PromptId: {image.PromptId}");
+            manifest.AppendLine($"  Duration: {image.TotalDuration}");
+        }
+
+        var manifestUri = await ArtifactText.SaveAsync(
             artifactStore,
-            manuscript,
-            $"productions/{incoming.ProductionId}/02-illustrator/manuscript.txt",
+            manifest.ToString(),
+            $"productions/{incoming.ProductionId}/02-illustrator/manifest.txt",
             context.CancellationToken);
 
-        var artifact = new ArtifactReference(
-            artifactUri,
+        var manifestArtifact = new ArtifactReference(
+            manifestUri,
             "text/plain",
-            "Manuscript enriched with visual direction by the illustrator agent.");
+            "Manifest describing scene images generated by the illustrator agent.");
 
-        var payload = new SceneImagesCreatedPayload([
-            new SceneArtifact(
-                "scene-001",
-                artifact,
-                1)
-        ]);
+        await productionRepository.RecordArtifactAsync(
+            incoming.ProductionId,
+            AgentRoles.Illustrator,
+            manifestArtifact,
+            context.CancellationToken);
 
-        var publication = productionFlow.GetRequiredPublication<SceneImagesCreatedPayload>(
+        var publication = productionFlow.GetRequiredPublication<CommonPayload>(
             AgentRoles.Illustrator,
             incoming.EventType);
 
-        var outgoing = EventEnvelope<SceneImagesCreatedPayload>.Create(
+        var outputArtifacts = imageArtifacts
+            .OrderBy(image => image.Order)
+            .Select(image => image.Artifact)
+            .ToArray();
+
+        var payload = CommonPayload.Create(
+            publication.EventType,
+            AgentRoles.Illustrator,
+            attributes: new Dictionary<string, string>(incoming.Payload.Attributes)
+            {
+                ["manifestUri"] = manifestArtifact.Uri,
+                ["imageCount"] = imageArtifacts.Count.ToString()
+            },
+            artifacts: outputArtifacts,
+            data: new Dictionary<string, object?>
+            {
+                ["comfyUiModel"] = _comfyUiOptions.Model,
+                ["maxScenes"] = _comfyUiOptions.MaxScenes
+            });
+
+        var outgoing = EventEnvelope<CommonPayload>.Create(
             publication.EventType,
             incoming.ProductionId,
             AgentRoles.Illustrator,
             payload,
             incoming.CorrelationId,
             incoming.EventId);
-
-        await productionRepository.RecordArtifactAsync(
-            incoming.ProductionId,
-            AgentRoles.Illustrator,
-            artifact,
-            context.CancellationToken);
 
         await productionRepository.RecordAgentRunAsync(
             new AgentRunRecord(
@@ -93,12 +170,12 @@ public sealed class StoryCreatedConsumer(
                 AgentRoles.Illustrator,
                 incoming.EventId,
                 outgoing.EventId,
-                incoming.Payload.Story.Uri,
-                artifact.Uri,
+                storyArtifact.Uri,
+                manifestArtifact.Uri,
                 "Completed",
                 startedAt,
                 DateTimeOffset.UtcNow,
-                "Added visual direction to the evolving text artifact."),
+                $"Generated {imageArtifacts.Count} scene image artifact(s) with ComfyUI FLUX quantized."),
             context.CancellationToken);
 
         await productionRepository.RecordEventAsync(outgoing, context.CancellationToken);
@@ -109,4 +186,116 @@ public sealed class StoryCreatedConsumer(
 
         await eventPublisher.PublishAsync(outgoing, context.CancellationToken);
     }
+
+    private static ArtifactReference GetRequiredArtifact(
+        EventEnvelope<CommonPayload> incoming,
+        string outputKey)
+    {
+        if (incoming.Payload.Attributes.TryGetValue(outputKey, out var uri) &&
+            !string.IsNullOrWhiteSpace(uri))
+        {
+            return incoming.Payload.Artifacts.FirstOrDefault(artifact => artifact.Uri == uri) ??
+                new ArtifactReference(uri, "application/octet-stream");
+        }
+
+        return incoming.Payload.Artifacts.First();
+    }
+
+    private static IReadOnlyList<SceneBrief> ExtractScenes(string manuscript, int maxScenes)
+    {
+        var sceneSectionIndex = manuscript.IndexOf("## 場景拆解", StringComparison.Ordinal);
+        var source = sceneSectionIndex >= 0 ? manuscript[sceneSectionIndex..] : manuscript;
+        var matches = SceneHeadingRegex().Matches(source);
+        var scenes = new List<SceneBrief>();
+
+        for (var index = 0; index < matches.Count; index++)
+        {
+            var match = matches[index];
+            var nextIndex = index + 1 < matches.Count
+                ? matches[index + 1].Index
+                : source.Length;
+            var body = source[match.Index..nextIndex].Trim();
+            var order = index + 1;
+            var title = CleanSceneTitle(match.Groups["title"].Value);
+
+            scenes.Add(new SceneBrief(
+                $"scene-{order:000}",
+                order,
+                string.IsNullOrWhiteSpace(title) ? $"場景 {order}" : title,
+                body));
+        }
+
+        if (scenes.Count == 0)
+        {
+            scenes.AddRange(FallbackScenes(manuscript));
+        }
+
+        var limit = Math.Clamp(maxScenes, 1, 12);
+        return scenes.Take(limit).ToArray();
+    }
+
+    private static IEnumerable<SceneBrief> FallbackScenes(string manuscript)
+    {
+        var storyIndex = manuscript.IndexOf("## 完整故事", StringComparison.Ordinal);
+        var source = storyIndex >= 0 ? manuscript[storyIndex..] : manuscript;
+        var paragraphs = source
+            .Split(["\r\n\r\n", "\n\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(paragraph => !paragraph.StartsWith('#') && !paragraph.StartsWith("【故事完】"))
+            .Take(3)
+            .ToArray();
+
+        for (var index = 0; index < paragraphs.Length; index++)
+        {
+            var order = index + 1;
+            yield return new SceneBrief(
+                $"scene-{order:000}",
+                order,
+                $"故事畫面 {order}",
+                paragraphs[index]);
+        }
+    }
+
+    private static string BuildImagePrompt(SceneBrief scene, string style)
+    {
+        return $"""
+            Create one finished illustration for a story video scene.
+            Visual style: {style}, Taiwanese picture-book sensibility, coherent character design, warm cinematic lighting, gentle watercolor texture, clean composition, no visible text.
+            Scene id: {scene.SceneId}
+            Scene title: {scene.Title}
+            Scene details:
+            {scene.Description}
+            Requirements: single frame, emotionally clear, consistent style across scenes, suitable as a key visual for animation.
+            """;
+    }
+
+    private static string? ExtractManuscriptValue(string manuscript, string key)
+    {
+        var match = Regex.Match(
+            manuscript,
+            $@"^{Regex.Escape(key)}:\s*(?<value>.+)$",
+            RegexOptions.Multiline);
+
+        return match.Success ? match.Groups["value"].Value.Trim() : null;
+    }
+
+    private static string CleanSceneTitle(string title)
+    {
+        var cleaned = SceneTitlePrefixRegex()
+            .Replace(title.Trim(), string.Empty, 1)
+            .Trim();
+
+        return string.IsNullOrWhiteSpace(cleaned) ? title.Trim() : cleaned;
+    }
+
+    [GeneratedRegex(@"(?m)^###\s*(?<title>.+)$")]
+    private static partial Regex SceneHeadingRegex();
+
+    [GeneratedRegex(@"^場\S*?[一二三四五六七八九十\d]+[：:\s-]*")]
+    private static partial Regex SceneTitlePrefixRegex();
+
+    private sealed record SceneBrief(
+        string SceneId,
+        int Order,
+        string Title,
+        string Description);
 }
