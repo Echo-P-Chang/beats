@@ -20,19 +20,29 @@ public sealed partial class ProductionRequestedConsumer(
     ITextGenerationClient textGenerationClient,
     IProductionFlow productionFlow,
     IProductionRepository productionRepository,
-    ILogger<ProductionRequestedConsumer> logger) : IConsumer<EventEnvelope<ProductionRequestedPayload>>
+    ILogger<ProductionRequestedConsumer> logger) : IConsumer<EventEnvelope<CommonPayload>>
 {
-    public async Task Consume(ConsumeContext<EventEnvelope<ProductionRequestedPayload>> context)
+    public async Task Consume(ConsumeContext<EventEnvelope<CommonPayload>> context)
     {
         var incoming = context.Message;
+
+        if (!productionFlow.IsSubscribedTo(AgentRoles.Storyteller, incoming.EventType))
+        {
+            return;
+        }
+
         var startedAt = DateTimeOffset.UtcNow;
+        var prompt = Input(incoming, "prompt");
+        var style = OptionalInput(incoming, "style");
+        var targetWordCount = IntInput(incoming, "targetWordCount", 800);
+        var durationSeconds = NullableIntInput(incoming, "durationSeconds");
 
         logger.LogInformation(
             "{AgentRole} consumed {EventType}. ProductionId={ProductionId}, Prompt={Prompt}",
             AgentRoles.Storyteller,
             incoming.EventType,
             incoming.ProductionId,
-            incoming.Payload.Prompt);
+            prompt);
 
         await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
 
@@ -44,10 +54,10 @@ public sealed partial class ProductionRequestedConsumer(
             # Production {incoming.ProductionId}
 
             ## Storyteller
-            Prompt: {incoming.Payload.Prompt}
-            Style: {incoming.Payload.Style ?? "not specified"}
-            Target word count: {incoming.Payload.TargetWordCount}
-            Target duration seconds: {incoming.Payload.DurationSeconds?.ToString() ?? "not specified"}
+            Prompt: {prompt}
+            Style: {style ?? "not specified"}
+            Target word count: {targetWordCount}
+            Target duration seconds: {durationSeconds?.ToString() ?? "not specified"}
             Model: {generation.Model}
             Generation duration: {generation.TotalDuration?.ToString() ?? "unknown"}
             Finish reason: {generation.FinishReason ?? "unknown"}
@@ -67,15 +77,27 @@ public sealed partial class ProductionRequestedConsumer(
             "text/plain",
             "Manuscript initialized by the storyteller agent.");
 
-        var payload = new StoryCreatedPayload(
-            manuscriptArtifact,
-            manuscriptArtifact);
-
-        var publication = productionFlow.GetRequiredPublication<StoryCreatedPayload>(
+        var publication = productionFlow.GetRequiredPublication<CommonPayload>(
             AgentRoles.Storyteller,
             incoming.EventType);
 
-        var outgoing = EventEnvelope<StoryCreatedPayload>.Create(
+        var payload = CommonPayload.Create(
+            publication.EventType,
+            AgentRoles.Storyteller,
+            attributes: new Dictionary<string, string>(incoming.Payload.Attributes)
+            {
+                ["storyUri"] = manuscriptArtifact.Uri,
+                ["scenesUri"] = manuscriptArtifact.Uri
+            },
+            artifacts: [manuscriptArtifact],
+            data: new Dictionary<string, object?>
+            {
+                ["model"] = generation.Model,
+                ["finishReason"] = generation.FinishReason,
+                ["validation"] = ValidateStoryDraft(generation.Text).Summary
+            });
+
+        var outgoing = EventEnvelope<CommonPayload>.Create(
             publication.EventType,
             incoming.ProductionId,
             AgentRoles.Storyteller,
@@ -113,16 +135,21 @@ public sealed partial class ProductionRequestedConsumer(
         await eventPublisher.PublishAsync(outgoing, context.CancellationToken);
     }
 
-    private static string BuildStoryPrompt(EventEnvelope<ProductionRequestedPayload> incoming)
+    private static string BuildStoryPrompt(EventEnvelope<CommonPayload> incoming)
     {
+        var prompt = Input(incoming, "prompt");
+        var style = OptionalInput(incoming, "style");
+        var targetWordCount = IntInput(incoming, "targetWordCount", 800);
+        var durationSeconds = NullableIntInput(incoming, "durationSeconds");
+
         return $"""
             請根據以下需求創作一份完整故事稿。請務必使用台灣繁體中文，不要使用粵語、簡體字或中國大陸慣用語。
 
             ProductionId: {incoming.ProductionId}
-            使用者需求: {incoming.Payload.Prompt}
-            風格: {incoming.Payload.Style ?? "未指定"}
-            目標字數: 約 {incoming.Payload.TargetWordCount} 字
-            影片長度: {(incoming.Payload.DurationSeconds is null ? "未指定" : $"{incoming.Payload.DurationSeconds} 秒")}
+            使用者需求: {prompt}
+            風格: {style ?? "未指定"}
+            目標字數: 約 {targetWordCount} 字
+            影片長度: {(durationSeconds is null ? "未指定" : $"{durationSeconds} 秒")}
 
             請嚴格依照以下格式輸出，不要加入格式外的文字：
 
@@ -131,7 +158,7 @@ public sealed partial class ProductionRequestedConsumer(
 
             ## 完整故事
             這一節只能寫故事本文，不要條列。
-            請寫約 {incoming.Payload.TargetWordCount} 字，至少 6 個自然段，最多 9 個自然段。
+            請寫約 {targetWordCount} 字，至少 6 個自然段，最多 9 個自然段。
             故事必須完整收尾，不可以停在半句、半段或未完成的情節。
             故事結尾必須明確解決主角遇到的問題。
             寫完故事後，務必繼續輸出「## 場景拆解」，不可只停在故事本文。
@@ -167,7 +194,7 @@ public sealed partial class ProductionRequestedConsumer(
     }
 
     private async Task<TextGenerationResponse> GenerateValidatedStoryAsync(
-        EventEnvelope<ProductionRequestedPayload> incoming,
+        EventEnvelope<CommonPayload> incoming,
         CancellationToken cancellationToken)
     {
         var generation = await textGenerationClient.GenerateAsync(
@@ -222,10 +249,12 @@ public sealed partial class ProductionRequestedConsumer(
     }
 
     private static string BuildRepairPrompt(
-        EventEnvelope<ProductionRequestedPayload> incoming,
+        EventEnvelope<CommonPayload> incoming,
         string draft,
         StoryDraftValidation validation)
     {
+        var targetWordCount = IntInput(incoming, "targetWordCount", 800);
+
         return $"""
             下面是一份說書人草稿，但它不符合格式需求。
             問題：{validation.Summary}
@@ -238,7 +267,7 @@ public sealed partial class ProductionRequestedConsumer(
             # 故事標題
 
             ## 完整故事
-            約 {incoming.Payload.TargetWordCount} 字，6 到 9 個自然段，故事必須完整收尾。
+            約 {targetWordCount} 字，6 到 9 個自然段，故事必須完整收尾。
 
             ## 場景拆解
 
@@ -313,9 +342,10 @@ public sealed partial class ProductionRequestedConsumer(
     }
 
     private static string BuildFallbackStructuredDraft(
-        EventEnvelope<ProductionRequestedPayload> incoming,
+        EventEnvelope<CommonPayload> incoming,
         string draft)
     {
+        var style = OptionalInput(incoming, "style");
         var title = ExtractTitle(draft);
         var story = ExtractStoryBody(draft);
         var paragraphs = SplitParagraphs(story).Take(9).ToArray();
@@ -355,7 +385,7 @@ public sealed partial class ProductionRequestedConsumer(
             };
 
             builder.AppendLine($"### 場景{sceneNumber}：{SceneTitles[index]}");
-            builder.AppendLine($"- 畫面描述：以「{Shorten(sceneSeeds[index], 48)}」為核心畫面，呈現{incoming.Payload.Style ?? "水彩繪本風"}的視覺氛圍。");
+            builder.AppendLine($"- 畫面描述：以「{Shorten(sceneSeeds[index], 48)}」為核心畫面，呈現{style ?? "水彩繪本風"}的視覺氛圍。");
             builder.AppendLine("- 角色動作：主角在畫面中央做出明確行動，讓觀眾看懂當下的選擇。");
             builder.AppendLine($"- 情緒與色彩：{mood}，色彩保持柔和、乾淨且適合動畫延展。");
             builder.AppendLine("- 給繪圖師的提示：維持一致角色造型與光線方向，不要加入文字、浮水印或標誌。");
@@ -413,6 +443,27 @@ public sealed partial class ProductionRequestedConsumer(
         return normalized.Length <= maxLength
             ? normalized
             : $"{normalized[..maxLength]}...";
+    }
+
+    private static string Input(EventEnvelope<CommonPayload> incoming, string key)
+    {
+        return incoming.Payload.Attributes.TryGetValue(key, out var value) ? value : string.Empty;
+    }
+
+    private static string? OptionalInput(EventEnvelope<CommonPayload> incoming, string key)
+    {
+        var value = Input(incoming, key);
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static int IntInput(EventEnvelope<CommonPayload> incoming, string key, int fallback)
+    {
+        return int.TryParse(Input(incoming, key), out var value) ? value : fallback;
+    }
+
+    private static int? NullableIntInput(EventEnvelope<CommonPayload> incoming, string key)
+    {
+        return int.TryParse(Input(incoming, key), out var value) ? value : null;
     }
 
     private const string StorytellerSystemPrompt = """

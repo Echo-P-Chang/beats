@@ -3,6 +3,7 @@ using Beats.Production.Contracts.Events;
 using Beats.Production.Contracts.Events.Payloads;
 using Beats.Production.Flows;
 using Beats.Production.Flows.DependencyInjection;
+using Beats.Production.Flows.FlowConfiguration;
 using Beats.Production.Contracts.Productions;
 using Beats.Production.Middleware.Ai;
 using Beats.Production.Middleware.Artifacts;
@@ -47,6 +48,52 @@ app.MapGet("/production-flow", (IConfiguration configuration) =>
 })
 .WithName("GetProductionFlow");
 
+app.MapGet("/production-flow/designer", (IConfiguration configuration) =>
+{
+    var path = ResolveProductionFlowPath(
+        configuration["ProductionFlows:ConfigPath"] ?? "flows/production-flow.json");
+    var json = File.ReadAllText(path);
+    var validation = ProductionFlowDesignerSource.ValidateJson(json);
+
+    if (!validation.IsValid)
+    {
+        return Results.BadRequest(new
+        {
+            configPath = path,
+            validation
+        });
+    }
+
+    return Results.Ok(new
+    {
+        configPath = path,
+        flow = ProductionFlowDesignerSource.CreateDesignerModel(json),
+        validation
+    });
+})
+.WithName("GetProductionFlowDesigner");
+
+app.MapPost("/production-flow/validate", async (HttpRequest request) =>
+{
+    using var reader = new StreamReader(request.Body);
+    var body = await reader.ReadToEndAsync();
+    var flowJson = ExtractFlowJson(body);
+
+    if (string.IsNullOrWhiteSpace(flowJson))
+    {
+        return Results.BadRequest(new ProductionFlowValidationResult(
+            false,
+            ["Request body must contain a flow JSON document or a flowJson string property."]));
+    }
+
+    var validation = ProductionFlowDesignerSource.ValidateJson(flowJson);
+
+    return validation.IsValid
+        ? Results.Ok(validation)
+        : Results.BadRequest(validation);
+})
+.WithName("ValidateProductionFlow");
+
 app.MapPost("/ai/text-generations", async (
     TextGenerationRequest request,
     ITextGenerationClient textGenerationClient,
@@ -70,16 +117,21 @@ app.MapPost("/productions", async (
     }
 
     var productionId = Guid.NewGuid();
-    var payload = new ProductionRequestedPayload(
-        request.Prompt,
-        request.Style,
-        request.TargetWordCount,
-        request.DurationSeconds);
+    var payload = CommonPayload.Create(
+        EventTypes.ProductionRequested,
+        AgentRoles.ProductionApi,
+        attributes: new Dictionary<string, string>
+        {
+            ["prompt"] = request.Prompt,
+            ["style"] = request.Style ?? string.Empty,
+            ["targetWordCount"] = request.TargetWordCount.ToString(),
+            ["durationSeconds"] = request.DurationSeconds?.ToString() ?? string.Empty
+        });
 
-    var publication = productionFlow.GetRequiredPublication<ProductionRequestedPayload>(
+    var publication = productionFlow.GetRequiredPublication<CommonPayload>(
         AgentRoles.ProductionApi);
 
-    var message = EventEnvelope<ProductionRequestedPayload>.Create(
+    var message = EventEnvelope<CommonPayload>.Create(
         publication.EventType,
         productionId,
         AgentRoles.ProductionApi,
@@ -273,6 +325,32 @@ static string? GetArtifactPath(Guid productionId, string artifactUri)
     return textIndex >= 0
         ? artifactUri[(textIndex + marker.Length)..]
         : null;
+}
+
+static string ExtractFlowJson(string body)
+{
+    if (string.IsNullOrWhiteSpace(body))
+    {
+        return string.Empty;
+    }
+
+    try
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(body);
+
+        if (document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object &&
+            document.RootElement.TryGetProperty("flowJson", out var flowJsonProperty) &&
+            flowJsonProperty.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            return flowJsonProperty.GetString() ?? string.Empty;
+        }
+    }
+    catch (System.Text.Json.JsonException)
+    {
+        return body;
+    }
+
+    return body;
 }
 
 static string BuildArtifactUri(AzureBlobStorageOptions options, string relativePath)

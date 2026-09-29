@@ -22,27 +22,34 @@ public sealed partial class StoryCreatedConsumer(
     IOptions<ComfyUiOptions> comfyUiOptions,
     IProductionFlow productionFlow,
     IProductionRepository productionRepository,
-    ILogger<StoryCreatedConsumer> logger) : IConsumer<EventEnvelope<StoryCreatedPayload>>
+    ILogger<StoryCreatedConsumer> logger) : IConsumer<EventEnvelope<CommonPayload>>
 {
     private readonly ComfyUiOptions _comfyUiOptions = comfyUiOptions.Value;
 
-    public async Task Consume(ConsumeContext<EventEnvelope<StoryCreatedPayload>> context)
+    public async Task Consume(ConsumeContext<EventEnvelope<CommonPayload>> context)
     {
         var incoming = context.Message;
+
+        if (!productionFlow.IsSubscribedTo(AgentRoles.Illustrator, incoming.EventType))
+        {
+            return;
+        }
+
         var startedAt = DateTimeOffset.UtcNow;
+        var storyArtifact = GetRequiredArtifact(incoming, "storyUri");
 
         logger.LogInformation(
             "{AgentRole} consumed {EventType}. ProductionId={ProductionId}, Scenes={ScenesArtifact}",
             AgentRoles.Illustrator,
             incoming.EventType,
             incoming.ProductionId,
-            incoming.Payload.Scenes.Uri);
+            storyArtifact.Uri);
 
         await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
 
         var manuscript = await ArtifactText.ReadAsync(
             artifactStore,
-            incoming.Payload.Story.Uri,
+            storyArtifact.Uri,
             context.CancellationToken);
 
         var scenes = ExtractScenes(manuscript, _comfyUiOptions.MaxScenes);
@@ -59,7 +66,7 @@ public sealed partial class StoryCreatedConsumer(
         manifest.AppendLine($"# Production {incoming.ProductionId}");
         manifest.AppendLine();
         manifest.AppendLine("## Illustrator");
-        manifest.AppendLine($"Source story artifact: {incoming.Payload.Story.Uri}");
+        manifest.AppendLine($"Source story artifact: {storyArtifact.Uri}");
         manifest.AppendLine($"ComfyUI model: {_comfyUiOptions.Model}");
         manifest.AppendLine($"Style: {style}");
         manifest.AppendLine();
@@ -124,13 +131,31 @@ public sealed partial class StoryCreatedConsumer(
             manifestArtifact,
             context.CancellationToken);
 
-        var payload = new SceneImagesCreatedPayload(imageArtifacts);
-
-        var publication = productionFlow.GetRequiredPublication<SceneImagesCreatedPayload>(
+        var publication = productionFlow.GetRequiredPublication<CommonPayload>(
             AgentRoles.Illustrator,
             incoming.EventType);
 
-        var outgoing = EventEnvelope<SceneImagesCreatedPayload>.Create(
+        var outputArtifacts = imageArtifacts
+            .OrderBy(image => image.Order)
+            .Select(image => image.Artifact)
+            .ToArray();
+
+        var payload = CommonPayload.Create(
+            publication.EventType,
+            AgentRoles.Illustrator,
+            attributes: new Dictionary<string, string>(incoming.Payload.Attributes)
+            {
+                ["manifestUri"] = manifestArtifact.Uri,
+                ["imageCount"] = imageArtifacts.Count.ToString()
+            },
+            artifacts: outputArtifacts,
+            data: new Dictionary<string, object?>
+            {
+                ["comfyUiModel"] = _comfyUiOptions.Model,
+                ["maxScenes"] = _comfyUiOptions.MaxScenes
+            });
+
+        var outgoing = EventEnvelope<CommonPayload>.Create(
             publication.EventType,
             incoming.ProductionId,
             AgentRoles.Illustrator,
@@ -145,7 +170,7 @@ public sealed partial class StoryCreatedConsumer(
                 AgentRoles.Illustrator,
                 incoming.EventId,
                 outgoing.EventId,
-                incoming.Payload.Story.Uri,
+                storyArtifact.Uri,
                 manifestArtifact.Uri,
                 "Completed",
                 startedAt,
@@ -160,6 +185,20 @@ public sealed partial class StoryCreatedConsumer(
             context.CancellationToken);
 
         await eventPublisher.PublishAsync(outgoing, context.CancellationToken);
+    }
+
+    private static ArtifactReference GetRequiredArtifact(
+        EventEnvelope<CommonPayload> incoming,
+        string outputKey)
+    {
+        if (incoming.Payload.Attributes.TryGetValue(outputKey, out var uri) &&
+            !string.IsNullOrWhiteSpace(uri))
+        {
+            return incoming.Payload.Artifacts.FirstOrDefault(artifact => artifact.Uri == uri) ??
+                new ArtifactReference(uri, "application/octet-stream");
+        }
+
+        return incoming.Payload.Artifacts.First();
     }
 
     private static IReadOnlyList<SceneBrief> ExtractScenes(string manuscript, int maxScenes)

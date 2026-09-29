@@ -17,23 +17,32 @@ public sealed class SceneImagesCreatedConsumer(
     IEventPublisher eventPublisher,
     IProductionFlow productionFlow,
     IProductionRepository productionRepository,
-    ILogger<SceneImagesCreatedConsumer> logger) : IConsumer<EventEnvelope<SceneImagesCreatedPayload>>
+    ILogger<SceneImagesCreatedConsumer> logger) : IConsumer<EventEnvelope<CommonPayload>>
 {
-    public async Task Consume(ConsumeContext<EventEnvelope<SceneImagesCreatedPayload>> context)
+    public async Task Consume(ConsumeContext<EventEnvelope<CommonPayload>> context)
     {
         var incoming = context.Message;
+
+        if (!productionFlow.IsSubscribedTo(AgentRoles.Animator, incoming.EventType))
+        {
+            return;
+        }
+
         var startedAt = DateTimeOffset.UtcNow;
+        var imageArtifacts = incoming.Payload.Artifacts
+            .Where(artifact => artifact.MediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
 
         logger.LogInformation(
             "{AgentRole} consumed {EventType}. ProductionId={ProductionId}, ImageCount={ImageCount}",
             AgentRoles.Animator,
             incoming.EventType,
             incoming.ProductionId,
-            incoming.Payload.Images.Count);
+            imageArtifacts.Length);
 
         await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
 
-        var inputArtifact = incoming.Payload.Images.FirstOrDefault()?.Artifact;
+        var inputArtifact = imageArtifacts.FirstOrDefault();
         var manuscript = new StringBuilder();
 
         manuscript.AppendLine($"# Production {incoming.ProductionId}");
@@ -44,10 +53,11 @@ public sealed class SceneImagesCreatedConsumer(
         manuscript.AppendLine();
         manuscript.AppendLine("Scene animation placeholders:");
 
-        foreach (var image in incoming.Payload.Images.OrderBy(image => image.Order))
+        for (var index = 0; index < imageArtifacts.Length; index++)
         {
-            manuscript.AppendLine($"- {image.SceneId}: Slow parallax push-in, gentle camera drift, soft transition, 8 seconds.");
-            manuscript.AppendLine($"  Source image: {image.Artifact.Uri}");
+            var image = imageArtifacts[index];
+            manuscript.AppendLine($"- scene-{index + 1:000}: Slow parallax push-in, gentle camera drift, soft transition, 8 seconds.");
+            manuscript.AppendLine($"  Source image: {image.Uri}");
         }
 
         var artifactUri = await ArtifactText.SaveAsync(
@@ -61,18 +71,21 @@ public sealed class SceneImagesCreatedConsumer(
             "text/plain",
             "Manuscript enriched with motion direction by the animator agent.");
 
-        var payload = new SceneAnimationsCreatedPayload([
-            new SceneArtifact(
-                "scene-001",
-                artifact,
-                1)
-        ]);
-
-        var publication = productionFlow.GetRequiredPublication<SceneAnimationsCreatedPayload>(
+        var publication = productionFlow.GetRequiredPublication<CommonPayload>(
             AgentRoles.Animator,
             incoming.EventType);
 
-        var outgoing = EventEnvelope<SceneAnimationsCreatedPayload>.Create(
+        var payload = CommonPayload.Create(
+            publication.EventType,
+            AgentRoles.Animator,
+            attributes: new Dictionary<string, string>(incoming.Payload.Attributes)
+            {
+                ["animationPlanUri"] = artifact.Uri,
+                ["animationCount"] = "1"
+            },
+            artifacts: [artifact]);
+
+        var outgoing = EventEnvelope<CommonPayload>.Create(
             publication.EventType,
             incoming.ProductionId,
             AgentRoles.Animator,
