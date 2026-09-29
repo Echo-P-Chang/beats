@@ -5,7 +5,6 @@ using Beats.Production.Flows;
 using Beats.Production.Flows.DependencyInjection;
 using Beats.Production.Flows.FlowConfiguration;
 using Beats.Production.Contracts.Productions;
-using Beats.Production.Middleware.Ai;
 using Beats.Production.Middleware.Artifacts;
 using Beats.Production.Middleware.Configuration;
 using Beats.Production.Middleware.DependencyInjection;
@@ -25,7 +24,6 @@ builder.Services.AddProductionMiddleware(options =>
 builder.Services.AddProductionFlows(builder.Configuration);
 builder.Services.AddAzureBlobArtifacts(builder.Configuration);
 builder.Services.AddProductionDatabase(builder.Configuration);
-builder.Services.AddOllamaTextGeneration(builder.Configuration);
 builder.Services.AddRabbitMqMessaging(builder.Configuration);
 
 var app = builder.Build();
@@ -93,16 +91,6 @@ app.MapPost("/production-flow/validate", async (HttpRequest request) =>
         : Results.BadRequest(validation);
 })
 .WithName("ValidateProductionFlow");
-
-app.MapPost("/ai/text-generations", async (
-    TextGenerationRequest request,
-    ITextGenerationClient textGenerationClient,
-    CancellationToken cancellationToken) =>
-{
-    var response = await textGenerationClient.GenerateAsync(request, cancellationToken);
-    return Results.Ok(response);
-})
-.WithName("GenerateText");
 
 app.MapPost("/productions", async (
     StartProductionRequest request,
