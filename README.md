@@ -79,6 +79,16 @@ http://localhost:5088
 
 The page can start a production, poll its status, show the production id, and link to the RabbitMQ management UI.
 
+Open the flow designer:
+
+```text
+http://localhost:5088/flow-designer.html
+```
+
+The designer visualizes `production-flow.json` as a left-to-right event flow. Each event node shows the service that publishes the event, the services that subscribe to it, and the follow-up event published next. Selecting an event opens its event profile editor for `EventType`, `Stage`, `Attributes`, `Artifacts`, and `Data`.
+
+The designer currently supports live JSON preview, validation, and JSON export. Saving directly back to `production-flow.json` is intentionally not enabled yet; apply exported changes to `flows/production-flow.json` and restart the affected services.
+
 ### Test The API
 
 Create a production:
@@ -316,6 +326,15 @@ This file is mounted into every .NET service at `/app/flows`. If you only change
 docker compose restart production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
 ```
 
+The Flow Designer page at `/flow-designer.html` is a UI layer over this same JSON file. It has four practical areas:
+
+- `Event Flow Architecture`: a left-to-right choreography map showing publisher service, event node, subscribers, and next-event direction.
+- `Event Types`: an inspector for the selected event profile, including `EventType`, `Stage`, `Attributes`, `Artifacts`, and `Data`.
+- `production-flow.json Preview`: the generated JSON preview that can be validated or exported.
+- `CommonPayload Schema`: a collapsible reference for the common payload used by every event.
+
+`Attributes` are the shared key/value context carried through the flow. The demo keeps every event on `CommonPayload`, so the flow can stay configurable without creating a new .NET payload class for every event.
+
 #### DI and Choreography Decoupling
 
 `production-flow.json` is the flow topology source for this demo. It describes which events each role subscribes to and which events it publishes after completing work. An agent does not need to know which agent comes next.
@@ -400,6 +419,15 @@ flows/production-flow.json
 ```bash
 docker compose restart production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
 ```
+
+`/flow-designer.html` 是這份 JSON 的 UI 設計介面，主要分成四個區域：
+
+- `Event Flow Architecture`：由左到右的 choreography map，呈現 publisher service、event node、subscribers，以及下一個 event 的方向。
+- `Event Types`：目前選取 event 的 inspector，可編輯 `EventType`、`Stage`、`Attributes`、`Artifacts`、`Data`。
+- `production-flow.json Preview`：即時產生的 JSON preview，可用來 validate 或 export。
+- `CommonPayload Schema`：可收合的補充資料，說明所有 event 共用的 payload schema。
+
+`Attributes` 是 event flow 中持續攜帶的 key/value context。這個 demo 讓每個 event 都使用 `CommonPayload`，因此可以維持 config-driven 的彈性，不需要每新增一種 event 就新增一個 .NET payload class。
 
 #### DI 與 choreography 解耦合設計
 
@@ -494,6 +522,16 @@ http://localhost:5088
 ```
 
 UI 可以建立 production、自動輪詢 production 狀態、查看 production id，並連到 RabbitMQ Management UI。
+
+開啟 flow designer：
+
+```text
+http://localhost:5088/flow-designer.html
+```
+
+designer 會把 `production-flow.json` 視覺化成由左到右的 event flow。每個 event node 會顯示哪個 service 發布這個 event、哪些 services 訂閱它，以及後續會發布哪個 event。點選 event 後，下方會顯示該 event 的 profile editor，可維護 `EventType`、`Stage`、`Attributes`、`Artifacts`、`Data`。
+
+目前 designer 支援即時 JSON preview、validate、export JSON。直接寫回 `production-flow.json` 的功能尚未開啟；要套用變更時，請把匯出的內容更新到 `flows/production-flow.json`，再 restart 相關服務。
 
 ### 測試 API
 
