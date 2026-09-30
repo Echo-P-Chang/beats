@@ -6,30 +6,125 @@ Language: [English](#english) | [中文](#中文)
 
 ## English
 
-This repository is a local Docker demo for an event-driven AI production pipeline.
+This repository demonstrates an event-driven, choreography-based AI agent production pipeline.
 
-The demo uses RabbitMQ as the event bus, Azurite as the local Azure Blob Storage emulator, MySQL as the local database, and six .NET 8 services:
-
-```text
-Production.Api
-Agents.Storyteller
-Agents.Illustrator
-Agents.Animator
-Agents.Editor
-Agents.Reviewer
-```
-
-The workflow is choreography-based. Each agent subscribes to the event it cares about, does its own work, writes records to MySQL, writes text artifacts to Azurite, and publishes the next event.
+The important idea is not that every agent is already intelligent. The important idea is the integration shape: each agent is an independent worker that reacts to events, owns its own implementation, stores its own records and artifacts, and publishes the next event without directly calling the next agent.
 
 ![Beats Production Console](docs/assets/production-console-preview.png)
 
 ![Flow Architecture](docs/assets/flow-architecture.svg)
 
+### What This Demo Shows
+
+- `Event-driven integration`: RabbitMQ is the event bus. Services communicate by publishing and subscribing to events instead of making direct service-to-service workflow calls.
+- `Choreography over orchestration`: there is no central orchestrator that commands every step. The flow emerges from event subscriptions and publications.
+- `Agent autonomy`: Storyteller, Illustrator, Animator, Editor, and Reviewer can each evolve independently. Their internal implementation can be dummy code, local LLM calls, ComfyUI image generation, cloud AI calls, or any future skill implementation.
+- `Config-driven flow topology`: `flows/production-flow.json` defines who publishes which event, who subscribes to it, and what event can happen next.
+- `Shared contract, independent capability`: all events use a common payload shape, while each agent decides how to interpret the event and produce its own artifact.
+- `Observable demo pipeline`: every production records events, agent runs, and artifacts so the choreography can be inspected end to end.
+
+### Conceptual Flow
+
+```text
+Production API
+  publishes ProductionRequested
+
+Storyteller
+  subscribes to ProductionRequested
+  writes story artifact
+  publishes StoryCreated
+
+Illustrator
+  subscribes to StoryCreated
+  writes scene image artifacts
+  publishes SceneImagesCreated
+
+Animator
+  subscribes to SceneImagesCreated
+  writes animation artifact
+  publishes SceneAnimationsCreated
+
+Editor
+  subscribes to SceneAnimationsCreated
+  writes final video artifact
+  publishes FinalVideoCreated
+
+Reviewer
+  subscribes to FinalVideoCreated
+  writes review artifact
+  publishes ReviewPassed
+```
+
+Each line is replaceable. For example, the Illustrator can start as a dummy text-file enricher, then later call ComfyUI, Azure AI, or another image generation service without changing how the rest of the pipeline communicates with it.
+
+### Flow Configuration
+
+The choreography topology lives in:
+
+```text
+flows/production-flow.json
+```
+
+This file describes each event as a business flow definition:
+
+```text
+which service publishes an event
+which services subscribe to that event
+which event is expected after the subscribers complete their work
+which stage, attributes, artifacts, and data belong to that event
+```
+
+The same JSON file is mounted into every .NET service at `/app/flows`. If you only change subscriptions or publications, you do not need to rebuild the images. Restart the related services so RabbitMQ bindings and MassTransit consumers are recreated:
+
+```bash
+docker compose restart production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
+```
+
+### DI And Choreography Decoupling
+
+`production-flow.json` is loaded by `Production.Flows` and exposed through dependency injection as `IProductionFlow`.
+
+That means agents do not hardcode the full business process. At startup, each service declares its role, such as `storyteller-agent`. The flow module finds that role's subscriptions, registers the matching MassTransit consumer, and lets the consumer ask `IProductionFlow` which event should be published next.
+
+The responsibility split is:
+
+- `Production.Contracts`: shared events, common payload, and contracts. This is the shared rulebook.
+- `Production.Flows`: loads `production-flow.json` and exposes the active choreography topology through DI.
+- `Production.Middleware`: shared adapters for RabbitMQ, artifact storage, database persistence, and AI service clients.
+- `Agents.*`: capability implementations. Each agent owns its own work and should not need to know which agent comes next.
+
+This keeps the system loosely coupled:
+
+- The API and agents publish events to RabbitMQ.
+- Agents react only to events they subscribe to.
+- Flow order is controlled by configuration.
+- Agent implementation can change without changing the whole pipeline.
+- Adding a new agent is mainly a matter of adding a service capability and updating the flow topology.
+
+### Flow Designer
+
+Open:
+
+```text
+http://localhost:5088/flow-designer.html
+```
+
+The designer is a UI layer over `production-flow.json`.
+
+It provides:
+
+- `Event Flow Architecture`: a left-to-right flow view showing publisher, event, subscribers, and next-event direction.
+- `Selected Event Profile`: an editor for the selected event's `EventType`, `Stage`, `Attributes`, `Artifacts`, and `Data`.
+- `production-flow.json Preview`: live generated JSON that can be validated or exported.
+- `CommonPayload Schema`: a collapsible reference for the common payload used by every event.
+
+Saving directly back to `production-flow.json` is intentionally not enabled yet. Export the JSON, apply it to `flows/production-flow.json`, then restart the affected services.
+
 ### Requirements
 
-Only Docker is required.
+Only Docker is required for the demo services.
 
-You do not need to install:
+You do not need to install these to run the containers:
 
 ```text
 .NET SDK
@@ -38,6 +133,8 @@ MySQL client
 RabbitMQ
 Azurite
 ```
+
+The `LocalLLM` branch also expects Ollama and ComfyUI to run as external host services if you want real local generation.
 
 ### Start The Demo
 
@@ -69,7 +166,7 @@ beats-mysql
 
 The `beats-storage-init` and `beats-mysql-init` containers are one-time initialization jobs. It is normal for them to exit with status `0`.
 
-### Use The UI
+### Use The Console
 
 Open:
 
@@ -77,17 +174,7 @@ Open:
 http://localhost:5088
 ```
 
-The page can start a production, poll its status, show the production id, and link to the RabbitMQ management UI.
-
-Open the flow designer:
-
-```text
-http://localhost:5088/flow-designer.html
-```
-
-The designer visualizes `production-flow.json` as a left-to-right event flow. Each event node shows the service that publishes the event, the services that subscribe to it, and the follow-up event published next. Selecting an event opens its event profile editor for `EventType`, `Stage`, `Attributes`, `Artifacts`, and `Data`.
-
-The designer currently supports live JSON preview, validation, and JSON export. Saving directly back to `production-flow.json` is intentionally not enabled yet; apply exported changes to `flows/production-flow.json` and restart the affected services.
+The console can start a production, poll status, visualize the event flow, show artifacts, and link to RabbitMQ management.
 
 ### Test The API
 
@@ -95,20 +182,6 @@ Create a production:
 
 ```bash
 curl -s -X POST http://127.0.0.1:5088/productions \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "prompt": "請說一則800字的故事，並產出影片。",
-    "style": "水彩繪本風",
-    "targetWordCount": 800,
-    "durationSeconds": 90
-  }'
-```
-
-If your host does not have `curl`, run the request from a temporary Docker container:
-
-```bash
-docker run --rm --network beats_default curlimages/curl:8.10.1 \
-  -s -X POST http://production-api:8080/productions \
   -H 'Content-Type: application/json' \
   -d '{
     "prompt": "請說一則800字的故事，並產出影片。",
@@ -128,52 +201,45 @@ The response contains a `productionId`:
 }
 ```
 
-Use that `productionId` to check status:
+Check status:
 
 ```bash
 curl -s http://127.0.0.1:5088/productions/{productionId}
 ```
 
-After a few seconds, the expected final status is:
+Expected final status:
 
 ```text
 ReviewPassed
 ```
 
-Expected event chain:
+### Inspect Runtime State
 
-```text
-ProductionRequested
-  -> StoryCreated
-  -> SceneImagesCreated
-  -> SceneAnimationsCreated
-  -> FinalVideoCreated
-  -> ReviewPassed
-```
-
-### Watch Logs
-
-Follow all .NET service logs:
+Follow service logs:
 
 ```bash
 docker compose logs -f production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
 ```
 
-Follow one service:
+Open RabbitMQ Management:
 
-```bash
-docker compose logs -f storyteller-agent
+```text
+http://localhost:15672
 ```
 
-### Check MySQL Records
+```text
+username: beats
+password: beats-dev
+vhost: beats
+```
 
-Open a MySQL shell inside the container:
+Open MySQL:
 
 ```bash
 docker exec -it beats-mysql mysql -uroot -pbeats-root-dev beats
 ```
 
-Useful SQL queries:
+Useful queries:
 
 ```sql
 SELECT ProductionId, Status, CreatedAt, UpdatedAt
@@ -197,36 +263,25 @@ WHERE ProductionId = '{productionId}'
 ORDER BY StartedAt;
 ```
 
-Or run a one-shot query from your host:
+### Inspect Artifacts
 
-```bash
-docker exec beats-mysql mysql -uroot -pbeats-root-dev beats \
-  -e "SELECT ProductionId, Status, CreatedAt FROM Productions ORDER BY CreatedAt DESC LIMIT 5;"
-```
-
-You can also connect with a GUI database client such as DBeaver, TablePlus, or MySQL Workbench:
+Artifacts are stored in the Azurite blob container:
 
 ```text
-Host:     127.0.0.1
-Port:     3306
-Database: beats
-User:     root
-Password: beats-root-dev
+artifacts
 ```
 
-### Check Azurite Artifacts
-
-Each agent writes a new text artifact version:
+Common artifact paths:
 
 ```text
 productions/{productionId}/01-storyteller/manuscript.txt
-productions/{productionId}/02-illustrator/manuscript.txt
+productions/{productionId}/02-illustrator/
 productions/{productionId}/03-animator/manuscript.txt
 productions/{productionId}/04-editor/manuscript.txt
 productions/{productionId}/05-reviewer/manuscript.txt
 ```
 
-List artifacts with Docker only:
+List artifacts:
 
 ```bash
 docker compose run --rm --no-deps storage-init \
@@ -250,47 +305,7 @@ docker compose run --rm --no-deps -v "$PWD:/workspace" storage-init \
     --overwrite'
 ```
 
-You can also inspect Azurite with Azure Storage Explorer. Use the local emulator connection option, or copy the Azurite connection string from `compose.yaml` and replace the internal `azurite` host with `127.0.0.1`.
-
-Blob container:
-
-```text
-artifacts
-```
-
-Artifact path:
-
-```text
-productions/{productionId}/
-```
-
-### RabbitMQ Management UI
-
-Open:
-
-```text
-http://localhost:15672
-```
-
-Credentials:
-
-```text
-username: beats
-password: beats-dev
-vhost: beats
-```
-
-### Service Ports
-
-```text
-Production API: http://localhost:5088
-RabbitMQ AMQP: localhost:5672
-RabbitMQ UI:   http://localhost:15672
-Azurite Blob:  http://localhost:10000
-Azurite Queue: http://localhost:10001
-Azurite Table: http://localhost:10002
-MySQL:         localhost:3306
-```
+You can also inspect Azurite with Azure Storage Explorer. Use the local emulator option, or copy the Azurite connection string from `compose.yaml` and replace the internal host `azurite` with `127.0.0.1`.
 
 ### Stop Or Reset
 
@@ -312,166 +327,227 @@ Rebuild after code changes:
 docker compose up -d --build
 ```
 
-### Flow Config
-
-The choreography flow is defined in:
-
-```text
-flows/production-flow.json
-```
-
-This file is mounted into every .NET service at `/app/flows`. If you only change agent subscriptions/publications in the flow config, you do not need to rebuild; restart the related services instead:
-
-```bash
-docker compose restart production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
-```
-
-The Flow Designer page at `/flow-designer.html` is a UI layer over this same JSON file. It has four practical areas:
-
-- `Event Flow Architecture`: a left-to-right choreography map showing publisher service, event node, subscribers, and next-event direction.
-- `Event Types`: an inspector for the selected event profile, including `EventType`, `Stage`, `Attributes`, `Artifacts`, and `Data`.
-- `production-flow.json Preview`: the generated JSON preview that can be validated or exported.
-- `CommonPayload Schema`: a collapsible reference for the common payload used by every event.
-
-`Attributes` are the shared key/value context carried through the flow. The demo keeps every event on `CommonPayload`, so the flow can stay configurable without creating a new .NET payload class for every event.
-
-#### DI and Choreography Decoupling
-
-`production-flow.json` is the flow topology source for this demo. It describes which events each role subscribes to and which events it publishes after completing work. An agent does not need to know which agent comes next.
-
-The responsibilities are separated like this:
-
-- `Production.Contracts` defines shared event payloads and contracts, which are the common rules every service follows.
-- `Production.Flows` loads `production-flow.json` and registers `IProductionFlow` through dependency injection, so the API and agents can query the active flow through an abstraction.
-- `Production.Middleware` provides shared infrastructure adapters for RabbitMQ, artifact storage, and the database.
-- Each `Agents.*` project keeps only its own capability implementation, such as storytelling, illustration, animation, editing, or review. It does not own the flow topology.
-
-At startup, each agent declares only its role, such as `storyteller-agent`. `Production.Flows` reads `production-flow.json`, finds that role's subscriptions, scans the agent assembly for the matching MassTransit consumer, and registers it through DI. After a consumer finishes its work, it asks `IProductionFlow` which event type to publish next instead of hardcoding the flow name inside the agent.
-
-This keeps the system in a choreography style:
-
-- There is no central orchestrator calling agents one by one.
-- The API and agents only publish events to the RabbitMQ event bus.
-- Agents react only to the events they subscribe to.
-- The flow order is controlled by `production-flow.json`.
-- Changing subscription/publication topology usually means editing config and restarting related services, not recompiling code.
-
-Note: RabbitMQ queue bindings and MassTransit consumer topology are created when each service starts, so subscription changes still require a service restart.
-
 ### Project Layout
 
 ```text
 flows/production-flow.json  Choreography configuration file
 src/Production.Api          API and UI for starting and checking productions
-src/Production.Contracts    Shared events, payloads, and contracts
-src/Production.Flows        Choreography rules for agent subscriptions and publications
-src/Production.Middleware   Shared event bus, artifact, and persistence adapters
-src/Agents.Storyteller      Storyteller capability; subscriptions/publications are loaded from Production.Flows
-src/Agents.Illustrator      Illustrator capability; subscriptions/publications are loaded from Production.Flows
-src/Agents.Animator         Animator capability; subscriptions/publications are loaded from Production.Flows
-src/Agents.Editor           Editor capability; subscriptions/publications are loaded from Production.Flows
-src/Agents.Reviewer         Reviewer capability; subscriptions/publications are loaded from Production.Flows
+src/Production.Contracts    Shared events, common payload, and contracts
+src/Production.Flows        Config-driven choreography topology
+src/Production.Middleware   Shared event bus, artifact, persistence, and AI adapters
+src/Agents.Storyteller      Storyteller capability implementation
+src/Agents.Illustrator      Illustrator capability implementation
+src/Agents.Animator         Animator capability implementation
+src/Agents.Editor           Editor capability implementation
+src/Agents.Reviewer         Reviewer capability implementation
 sql/                        Database schema
-docs/                       Extra local operation notes
+docs/                       Local operation notes and images
 ```
 
 ### Notes
 
-This is a dummy pipeline. The current agents enrich a text artifact so the choreography, pub-sub integration, persistence, and artifact flow can be tested end to end.
-
-Real AI generation can later be added inside each agent without changing the integration shape.
+This demo is designed so each agent can start as a dummy shell and later become a real AI-powered worker without changing the event-driven integration style.
 
 All credentials in `compose.yaml`, `.env.example`, and this README are local demo defaults only. Do not reuse them for cloud resources or shared environments.
+
+### Supplementary: Local AI Services
+
+Ollama and ComfyUI are not included in Docker Compose. They are treated as external AI services running on the host machine.
+
+Containers call Ollama through:
+
+```text
+http://host.docker.internal:11434
+```
+
+Check Ollama:
+
+```bash
+curl -s http://127.0.0.1:11434/api/tags
+```
+
+The Storyteller can use an override model:
+
+```text
+STORYTELLER_OLLAMA_MODEL=hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M
+STORYTELLER_OLLAMA_TIMEOUT_SECONDS=900
+STORYTELLER_OLLAMA_NUM_PREDICT=8192
+```
+
+Containers call ComfyUI through:
+
+```text
+http://host.docker.internal:8188
+```
+
+Check ComfyUI:
+
+```bash
+curl -s http://127.0.0.1:8188/system_stats
+```
+
+Default FLUX-related settings:
+
+```text
+COMFYUI_MODEL=flux1-schnell-Q4_K_S.gguf
+COMFYUI_CLIP_NAME1=clip_l.safetensors
+COMFYUI_CLIP_NAME2=t5xxl_fp8_e4m3fn.safetensors
+COMFYUI_VAE_NAME=ae.safetensors
+COMFYUI_WIDTH=768
+COMFYUI_HEIGHT=768
+COMFYUI_STEPS=4
+COMFYUI_GUIDANCE=3.5
+COMFYUI_MAX_SCENES=3
+```
+
+### Supplementary: Technology Stack
+
+```text
+.NET 8
+ASP.NET Core Minimal API
+MassTransit
+RabbitMQ
+MySQL
+Azurite
+Azure Blob Storage SDK
+Docker Compose
+Ollama, optional external local LLM runtime on LocalLLM branch
+ComfyUI / FLUX, optional external local image generation runtime on LocalLLM branch
+```
+
+Service ports:
+
+```text
+Production API: http://localhost:5088
+RabbitMQ AMQP: localhost:5672
+RabbitMQ UI:   http://localhost:15672
+Azurite Blob:  http://localhost:10000
+Azurite Queue: http://localhost:10001
+Azurite Table: http://localhost:10002
+MySQL:         localhost:3306
+```
 
 ---
 
 ## 中文
 
-這是一個本機 Docker demo，用來展示 event-driven choreography 的 AI production pipeline。
+這個 repository 示範的是一套 event-driven、choreography-based 的 AI agent production pipeline。
 
-整套 demo 使用 RabbitMQ 作為 event bus、Azurite 作為本機 Azure Blob Storage emulator、MySQL 作為本機資料庫，並包含六個 .NET 8 服務：
-
-```text
-Production.Api
-Agents.Storyteller
-Agents.Illustrator
-Agents.Animator
-Agents.Editor
-Agents.Reviewer
-```
-
-流程採 choreography 架構。每個 agent 只訂閱自己關心的事件，完成自己的工作後寫入 MySQL、產出 artifact 到 Azurite，然後發布下一個事件。
+重點不是每個 agent 現在都已經很聰明，而是整合架構：每個 agent 都是獨立 worker，收到事件後執行自己的能力、記錄自己的執行狀態、產出自己的 artifact，最後發布下一個事件，而不是直接呼叫下一個 agent。
 
 ![Beats Production Console](docs/assets/production-console-preview.png)
 
 ![Flow Architecture](docs/assets/flow-architecture.svg)
 
+### 這個 Demo 想表達什麼
+
+- `Event-driven integration`：RabbitMQ 是 event bus。服務之間透過 event publish / subscribe 溝通，而不是彼此直接呼叫。
+- `Choreography over orchestration`：沒有中央 orchestrator 逐步命令每個 agent。流程是由事件訂閱與發布自然串起來。
+- `Agent autonomy`：說書人、繪圖師、動畫師、剪輯師、審查者都可以各自實作與演進。內部可以是 dummy code、Ollama、ComfyUI、雲端 AI，或未來任何 agent skill。
+- `Config-driven flow topology`：`flows/production-flow.json` 定義誰發布 event、誰訂閱 event，以及後續會發生什麼 event。
+- `Shared contract, independent capability`：所有 event 使用共用 payload schema，但每個 agent 可以用自己的方式解讀事件並產出 artifact。
+- `Observable demo pipeline`：每次 production 都會記錄 events、agent runs、artifacts，方便檢查整個 choreography 是否正確流動。
+
+### 概念流程
+
+```text
+Production API
+  發布 ProductionRequested
+
+Storyteller
+  訂閱 ProductionRequested
+  產出故事 artifact
+  發布 StoryCreated
+
+Illustrator
+  訂閱 StoryCreated
+  產出場景圖片 artifacts
+  發布 SceneImagesCreated
+
+Animator
+  訂閱 SceneImagesCreated
+  產出動畫 artifact
+  發布 SceneAnimationsCreated
+
+Editor
+  訂閱 SceneAnimationsCreated
+  產出最終影片 artifact
+  發布 FinalVideoCreated
+
+Reviewer
+  訂閱 FinalVideoCreated
+  產出審查 artifact
+  發布 ReviewPassed
+```
+
+每一段能力都可以替換。例如 Illustrator 一開始可以只是 dummy text-file enricher，之後再改成呼叫 ComfyUI、Azure AI 或其他圖片生成服務，而不用改變整套 pipeline 的通訊方式。
+
 ### Flow Config
 
-choreography 流程定義在：
+choreography 拓樸定義在：
 
 ```text
 flows/production-flow.json
 ```
 
-這個檔案會 mount 到每個 .NET service 的 `/app/flows`。如果只調整 agent 訂閱/發布的 flow config，不需要重新編譯；修改後 restart 相關服務即可：
+這份檔案把每個 event 當成一筆業務流程定義：
+
+```text
+哪個 service 發布這個 event
+哪些 services 訂閱這個 event
+訂閱者完成後預期會接續發布什麼 event
+這個 event 對應的 stage、attributes、artifacts、data
+```
+
+同一份 JSON 會 mount 到每個 .NET service 的 `/app/flows`。如果只調整訂閱或發布拓樸，不需要重新 build image；restart 相關服務，讓 RabbitMQ bindings 與 MassTransit consumers 重新建立即可：
 
 ```bash
 docker compose restart production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
 ```
 
-`/flow-designer.html` 是這份 JSON 的 UI 設計介面，主要分成四個區域：
+### DI 與 Choreography 解耦合設計
 
-- `Event Flow Architecture`：由左到右的 choreography map，呈現 publisher service、event node、subscribers，以及下一個 event 的方向。
-- `Event Types`：目前選取 event 的 inspector，可編輯 `EventType`、`Stage`、`Attributes`、`Artifacts`、`Data`。
-- `production-flow.json Preview`：即時產生的 JSON preview，可用來 validate 或 export。
-- `CommonPayload Schema`：可收合的補充資料，說明所有 event 共用的 payload schema。
+`production-flow.json` 由 `Production.Flows` 載入，並透過 dependency injection 以 `IProductionFlow` 提供給 API 與 agents 使用。
 
-`Attributes` 是 event flow 中持續攜帶的 key/value context。這個 demo 讓每個 event 都使用 `CommonPayload`，因此可以維持 config-driven 的彈性，不需要每新增一種 event 就新增一個 .NET payload class。
+因此 agent 不需要 hardcode 整個業務流程。啟動時，每個 service 只宣告自己的 role，例如 `storyteller-agent`。flow module 會找出這個 role 訂閱哪些 events、註冊對應的 MassTransit consumer，並讓 consumer 在完成任務後透過 `IProductionFlow` 查詢下一個要發布的 event。
 
-#### DI 與 choreography 解耦合設計
+分工如下：
 
-`production-flow.json` 是這個 demo 的流程拓樸來源。它描述每個角色會訂閱哪些 event，以及在處理完成後會發布哪些 event；agent 本身不需要知道下一個 agent 是誰。
+- `Production.Contracts`：共用 events、common payload、contracts，也就是大家遵守的遊戲規則。
+- `Production.Flows`：讀取 `production-flow.json`，並透過 DI 提供目前啟用的 choreography topology。
+- `Production.Middleware`：RabbitMQ、artifact storage、database persistence、AI service clients 等共用 adapters。
+- `Agents.*`：各 agent 自己的能力實作。agent 只需要做好自己的工作，不需要知道下一個 agent 是誰。
 
-設計分工如下：
+這讓系統維持低耦合：
 
-- `Production.Contracts` 定義事件 payload 與共用 contract，也就是所有服務共同遵守的「遊戲規則」。
-- `Production.Flows` 讀取 `production-flow.json`，並透過 DI 註冊 `IProductionFlow`，讓 API 與 agents 透過抽象介面查詢目前流程。
-- `Production.Middleware` 提供 RabbitMQ、artifact storage、database 等共用基礎設施 adapters。
-- 各 `Agents.*` project 只保留自己的能力實作，例如說書、繪圖、動畫、剪輯、審查，不直接保存流程拓樸。
+- API 與 agents 只發布 event 到 RabbitMQ。
+- agents 只處理自己訂閱的 event。
+- flow order 由 config 決定。
+- agent 內部實作可以替換，不牽動整條 pipeline。
+- 要加入新 agent，主要是新增 service capability 並更新 flow topology。
 
-啟動時，每個 agent 只宣告自己的 role，例如 `storyteller-agent`。`Production.Flows` 會依照 `production-flow.json` 找出該 role 的 subscriptions，掃描 agent assembly 中對應的 MassTransit consumer，並透過 DI 註冊到 RabbitMQ。consumer 完成工作後，也會透過 `IProductionFlow` 查詢下一個要發布的 event type，而不是在 agent 內 hard code 流程名稱。
+### Flow Designer
 
-這讓整體流程維持 choreography 架構：
-
-- 沒有中央 orchestrator 逐步呼叫每個 agent。
-- API 與 agents 只發布 event 到 RabbitMQ event bus。
-- agents 只根據自己訂閱到的 event 反應。
-- 流程順序由 `production-flow.json` 決定。
-- 修改訂閱/發布拓樸時，通常只要更新 config 並 restart 相關服務，不需要重新編譯。
-
-注意：RabbitMQ queue binding 與 MassTransit consumer topology 是在 service 啟動時建立，因此變更 subscriptions 後仍需要 restart service 才會生效。
-
-### 專案結構
+開啟：
 
 ```text
-flows/production-flow.json  choreography 設定檔
-src/Production.Api          建立與查詢 productions 的 API / UI
-src/Production.Contracts    共用 events、payloads、contracts
-src/Production.Flows        choreography 流程規則，定義 agent 訂閱與發布拓樸
-src/Production.Middleware   共用 event bus、artifact、persistence adapters
-src/Agents.Storyteller      說書人能力實作，訂閱/發布由 Production.Flows 載入
-src/Agents.Illustrator      繪圖師能力實作，訂閱/發布由 Production.Flows 載入
-src/Agents.Animator         動畫師能力實作，訂閱/發布由 Production.Flows 載入
-src/Agents.Editor           剪輯師能力實作，訂閱/發布由 Production.Flows 載入
-src/Agents.Reviewer         審查者能力實作，訂閱/發布由 Production.Flows 載入
-sql/                        database schema
-docs/                       額外本機操作文件
+http://localhost:5088/flow-designer.html
 ```
+
+designer 是 `production-flow.json` 的 UI 維護介面。
+
+它提供：
+
+- `Event Flow Architecture`：由左到右的 flow view，呈現 publisher、event、subscribers 與 next-event direction。
+- `Selected Event Profile`：編輯目前選取 event 的 `EventType`、`Stage`、`Attributes`、`Artifacts`、`Data`。
+- `production-flow.json Preview`：即時產生 JSON，可 validate 或 export。
+- `CommonPayload Schema`：可收合的補充資料，說明所有 event 共用的 payload schema。
+
+目前尚未開啟直接寫回 `production-flow.json` 的功能。請先 export JSON，套用到 `flows/production-flow.json`，再 restart 受影響的服務。
 
 ### 需求
 
-只需要 Docker。
+執行 demo services 只需要 Docker。
 
 不需要額外安裝：
 
@@ -482,6 +558,8 @@ MySQL client
 RabbitMQ
 Azurite
 ```
+
+`LocalLLM` 分支若要進行真實本機生成，還需要主機上另外啟動 Ollama 與 ComfyUI。
 
 ### 啟動 Demo
 
@@ -513,7 +591,7 @@ beats-mysql
 
 `beats-storage-init` 和 `beats-mysql-init` 是一次性的初始化 job，結束並顯示 `Exited (0)` 是正常的。
 
-### 使用 UI
+### 使用 Console
 
 開啟：
 
@@ -521,38 +599,14 @@ beats-mysql
 http://localhost:5088
 ```
 
-UI 可以建立 production、自動輪詢 production 狀態、查看 production id，並連到 RabbitMQ Management UI。
-
-開啟 flow designer：
-
-```text
-http://localhost:5088/flow-designer.html
-```
-
-designer 會把 `production-flow.json` 視覺化成由左到右的 event flow。每個 event node 會顯示哪個 service 發布這個 event、哪些 services 訂閱它，以及後續會發布哪個 event。點選 event 後，下方會顯示該 event 的 profile editor，可維護 `EventType`、`Stage`、`Attributes`、`Artifacts`、`Data`。
-
-目前 designer 支援即時 JSON preview、validate、export JSON。直接寫回 `production-flow.json` 的功能尚未開啟；要套用變更時，請把匯出的內容更新到 `flows/production-flow.json`，再 restart 相關服務。
+console 可以建立 production、自動輪詢狀態、視覺化 event flow、查看 artifacts，並連到 RabbitMQ Management UI。
 
 ### 測試 API
 
-建立一筆 production：
+建立 production：
 
 ```bash
 curl -s -X POST http://127.0.0.1:5088/productions \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "prompt": "請說一則800字的故事，並產出影片。",
-    "style": "水彩繪本風",
-    "targetWordCount": 800,
-    "durationSeconds": 90
-  }'
-```
-
-如果你的主機沒有 `curl`，可以用暫時的 Docker container 發 request：
-
-```bash
-docker run --rm --network beats_default curlimages/curl:8.10.1 \
-  -s -X POST http://production-api:8080/productions \
   -H 'Content-Type: application/json' \
   -d '{
     "prompt": "請說一則800字的故事，並產出影片。",
@@ -572,46 +626,39 @@ docker run --rm --network beats_default curlimages/curl:8.10.1 \
 }
 ```
 
-查詢 production 狀態：
+查詢狀態：
 
 ```bash
 curl -s http://127.0.0.1:5088/productions/{productionId}
 ```
 
-幾秒後，預期最終狀態是：
+預期最終狀態：
 
 ```text
 ReviewPassed
 ```
 
-預期事件鏈：
+### 檢查 Runtime 狀態
 
-```text
-ProductionRequested
-  -> StoryCreated
-  -> SceneImagesCreated
-  -> SceneAnimationsCreated
-  -> FinalVideoCreated
-  -> ReviewPassed
-```
-
-### 查看 Logs
-
-查看所有 .NET service logs：
+查看服務 logs：
 
 ```bash
 docker compose logs -f production-api storyteller-agent illustrator-agent animator-agent editor-agent reviewer-agent
 ```
 
-查看單一 service：
+開啟 RabbitMQ Management：
 
-```bash
-docker compose logs -f storyteller-agent
+```text
+http://localhost:15672
 ```
 
-### 查看 MySQL 紀錄
+```text
+username: beats
+password: beats-dev
+vhost: beats
+```
 
-進入 MySQL shell：
+進入 MySQL：
 
 ```bash
 docker exec -it beats-mysql mysql -uroot -pbeats-root-dev beats
@@ -641,36 +688,25 @@ WHERE ProductionId = '{productionId}'
 ORDER BY StartedAt;
 ```
 
-也可以直接在 host 執行一次性查詢：
+### 檢查 Artifacts
 
-```bash
-docker exec beats-mysql mysql -uroot -pbeats-root-dev beats \
-  -e "SELECT ProductionId, Status, CreatedAt FROM Productions ORDER BY CreatedAt DESC LIMIT 5;"
-```
-
-如果想用 GUI DB client，例如 DBeaver、TablePlus、MySQL Workbench：
+Artifacts 會存放在 Azurite blob container：
 
 ```text
-Host:     127.0.0.1
-Port:     3306
-Database: beats
-User:     root
-Password: beats-root-dev
+artifacts
 ```
 
-### 查看 Azurite Artifacts
-
-每個 agent 會產出一版新的文字 artifact：
+常見 artifact paths：
 
 ```text
 productions/{productionId}/01-storyteller/manuscript.txt
-productions/{productionId}/02-illustrator/manuscript.txt
+productions/{productionId}/02-illustrator/
 productions/{productionId}/03-animator/manuscript.txt
 productions/{productionId}/04-editor/manuscript.txt
 productions/{productionId}/05-reviewer/manuscript.txt
 ```
 
-只用 Docker 列出 artifacts：
+列出 artifacts：
 
 ```bash
 docker compose run --rm --no-deps storage-init \
@@ -694,47 +730,7 @@ docker compose run --rm --no-deps -v "$PWD:/workspace" storage-init \
     --overwrite'
 ```
 
-也可以用 Azure Storage Explorer 查看 Azurite。使用 local emulator 連線選項，或從 `compose.yaml` 複製 Azurite connection string，並把內部 host `azurite` 改成 `127.0.0.1`。
-
-Blob container：
-
-```text
-artifacts
-```
-
-artifact 路徑：
-
-```text
-productions/{productionId}/
-```
-
-### RabbitMQ Management UI
-
-開啟：
-
-```text
-http://localhost:15672
-```
-
-帳密：
-
-```text
-username: beats
-password: beats-dev
-vhost: beats
-```
-
-### Service Ports
-
-```text
-Production API: http://localhost:5088
-RabbitMQ AMQP: localhost:5672
-RabbitMQ UI:   http://localhost:15672
-Azurite Blob:  http://localhost:10000
-Azurite Queue: http://localhost:10001
-Azurite Table: http://localhost:10002
-MySQL:         localhost:3306
-```
+也可以用 Azure Storage Explorer 查看 Azurite。使用 local emulator 選項，或從 `compose.yaml` 複製 Azurite connection string，並把內部 host `azurite` 改成 `127.0.0.1`。
 
 ### 停止或重置
 
@@ -756,10 +752,102 @@ docker compose down -v
 docker compose up -d --build
 ```
 
+### 專案結構
+
+```text
+flows/production-flow.json  choreography 設定檔
+src/Production.Api          建立與查詢 productions 的 API / UI
+src/Production.Contracts    共用 events、common payload、contracts
+src/Production.Flows        config-driven choreography topology
+src/Production.Middleware   共用 event bus、artifact、persistence、AI adapters
+src/Agents.Storyteller      說書人能力實作
+src/Agents.Illustrator      繪圖師能力實作
+src/Agents.Animator         動畫師能力實作
+src/Agents.Editor           剪輯師能力實作
+src/Agents.Reviewer         審查者能力實作
+sql/                        database schema
+docs/                       本機操作文件與圖片
+```
+
 ### 備註
 
-目前 agents 是 dummy implementation，會逐步加值同一份文字 artifact，用來驗證 choreography、pub-sub、DB records 和 artifact flow。
-
-未來可以把真正的 AI 生成邏輯加進各 agent，而不需要改變整體整合架構。
+這個 demo 的設計目標是：每個 agent 可以先是 dummy shell，之後再逐步變成真正的 AI-powered worker，同時不改變 event-driven 的整合方式。
 
 `compose.yaml`、`.env.example` 和本 README 裡的帳密都是本機 demo 預設值。請不要把這些值用在 cloud resources 或 shared environments。
+
+### 補充資料：本機 AI Services
+
+Ollama 與 ComfyUI 不包含在 Docker Compose 內。它們被視為主機上另外運行的外部 AI services。
+
+containers 透過這個位址呼叫 Ollama：
+
+```text
+http://host.docker.internal:11434
+```
+
+確認 Ollama：
+
+```bash
+curl -s http://127.0.0.1:11434/api/tags
+```
+
+Storyteller 可以使用獨立模型設定：
+
+```text
+STORYTELLER_OLLAMA_MODEL=hf.co/yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF:Q4_K_M
+STORYTELLER_OLLAMA_TIMEOUT_SECONDS=900
+STORYTELLER_OLLAMA_NUM_PREDICT=8192
+```
+
+containers 透過這個位址呼叫 ComfyUI：
+
+```text
+http://host.docker.internal:8188
+```
+
+確認 ComfyUI：
+
+```bash
+curl -s http://127.0.0.1:8188/system_stats
+```
+
+預設 FLUX 相關設定：
+
+```text
+COMFYUI_MODEL=flux1-schnell-Q4_K_S.gguf
+COMFYUI_CLIP_NAME1=clip_l.safetensors
+COMFYUI_CLIP_NAME2=t5xxl_fp8_e4m3fn.safetensors
+COMFYUI_VAE_NAME=ae.safetensors
+COMFYUI_WIDTH=768
+COMFYUI_HEIGHT=768
+COMFYUI_STEPS=4
+COMFYUI_GUIDANCE=3.5
+COMFYUI_MAX_SCENES=3
+```
+
+### 補充資料：技術堆疊
+
+```text
+.NET 8
+ASP.NET Core Minimal API
+MassTransit
+RabbitMQ
+MySQL
+Azurite
+Azure Blob Storage SDK
+Docker Compose
+Ollama，LocalLLM branch 可選外部本機 LLM runtime
+ComfyUI / FLUX，LocalLLM branch 可選外部本機圖片生成 runtime
+```
+
+服務 ports：
+
+```text
+Production API: http://localhost:5088
+RabbitMQ AMQP: localhost:5672
+RabbitMQ UI:   http://localhost:15672
+Azurite Blob:  http://localhost:10000
+Azurite Queue: http://localhost:10001
+Azurite Table: http://localhost:10002
+MySQL:         localhost:3306
+```
