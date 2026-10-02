@@ -4,24 +4,25 @@ using Beats.Production.Contracts.Events.Payloads;
 using Beats.Production.Flows;
 using Beats.Production.Contracts.Media;
 using Beats.Production.Contracts.Productions;
+using Beats.Production.Contracts.Storyboarding;
 using Beats.Production.Middleware.Ai;
 using Beats.Production.Middleware.Artifacts;
 using Beats.Production.Middleware.Eventing;
 using Beats.Production.Middleware.Persistence;
+using Beats.Production.Middleware.Specifications;
 using MassTransit;
 using Microsoft.Extensions.Options;
-using System.Text;
-using System.Text.RegularExpressions;
 
 namespace Beats.Agents.Illustrator;
 
-public sealed partial class StoryCreatedConsumer(
+public sealed class StoryCreatedConsumer(
     IArtifactStore artifactStore,
     IEventPublisher eventPublisher,
     IImageGenerationClient imageGenerationClient,
     IOptions<ComfyUiOptions> comfyUiOptions,
     IProductionFlow productionFlow,
     IProductionRepository productionRepository,
+    IProductionSpecValidator productionSpecValidator,
     ILogger<StoryCreatedConsumer> logger) : IConsumer<EventEnvelope<CommonPayload>>
 {
     private readonly ComfyUiOptions _comfyUiOptions = comfyUiOptions.Value;
@@ -35,42 +36,45 @@ public sealed partial class StoryCreatedConsumer(
             return;
         }
 
+        var specValidation = await productionSpecValidator.ValidateAsync(
+            incoming,
+            AgentRoles.Illustrator,
+            context.CancellationToken);
+        EnsureValidSpec(specValidation);
+
         var startedAt = DateTimeOffset.UtcNow;
         var storyArtifact = GetRequiredArtifact(incoming, "storyUri");
+        var sceneBreakdownArtifact = GetRequiredArtifact(incoming, "sceneBreakdownUri", "scenesUri");
 
         logger.LogInformation(
             "{AgentRole} consumed {EventType}. ProductionId={ProductionId}, Scenes={ScenesArtifact}",
             AgentRoles.Illustrator,
             incoming.EventType,
             incoming.ProductionId,
-            storyArtifact.Uri);
+            sceneBreakdownArtifact.Uri);
 
         await Task.Delay(TimeSpan.FromSeconds(2), context.CancellationToken);
 
-        var manuscript = await ArtifactText.ReadAsync(
+        var sceneBreakdown = await ArtifactJson.ReadAsync<SceneBreakdownDocument>(
             artifactStore,
-            storyArtifact.Uri,
+            sceneBreakdownArtifact.Uri,
             context.CancellationToken);
 
-        var scenes = ExtractScenes(manuscript, _comfyUiOptions.MaxScenes);
-        var style = ExtractManuscriptValue(manuscript, "Style") ?? "watercolor storybook";
+        var scenes = sceneBreakdown.Scenes
+            .OrderBy(scene => scene.Order)
+            .Take(Math.Clamp(_comfyUiOptions.MaxScenes, 1, 12))
+            .ToArray();
+        var style = string.IsNullOrWhiteSpace(sceneBreakdown.Style)
+            ? incoming.Payload.Attributes.GetValueOrDefault("style") ?? "watercolor storybook"
+            : sceneBreakdown.Style;
         var imageArtifacts = new List<SceneArtifact>();
-        var manifest = new StringBuilder();
+        var manifestItems = new List<object>();
 
         logger.LogInformation(
             "{AgentRole} extracted {SceneCount} scene(s). ProductionId={ProductionId}",
             AgentRoles.Illustrator,
-            scenes.Count,
+            scenes.Length,
             incoming.ProductionId);
-
-        manifest.AppendLine($"# Production {incoming.ProductionId}");
-        manifest.AppendLine();
-        manifest.AppendLine("## Illustrator");
-        manifest.AppendLine($"Source story artifact: {storyArtifact.Uri}");
-        manifest.AppendLine($"ComfyUI model: {_comfyUiOptions.Model}");
-        manifest.AppendLine($"Style: {style}");
-        manifest.AppendLine();
-        manifest.AppendLine("Generated scene images:");
 
         foreach (var scene in scenes)
         {
@@ -107,23 +111,39 @@ public sealed partial class StoryCreatedConsumer(
                 imageArtifact,
                 context.CancellationToken);
 
-            manifest.AppendLine($"- {scene.SceneId}: {scene.Title}");
-            manifest.AppendLine($"  Artifact: {imageUri}");
-            manifest.AppendLine($"  ComfyUI file: {image.FileName}");
-            manifest.AppendLine($"  PromptId: {image.PromptId}");
-            manifest.AppendLine($"  Duration: {image.TotalDuration}");
+            manifestItems.Add(new
+            {
+                scene.SceneId,
+                scene.Order,
+                scene.Title,
+                ArtifactUri = imageUri,
+                image.MediaType,
+                image.FileName,
+                image.PromptId,
+                image.TotalDuration
+            });
         }
 
-        var manifestUri = await ArtifactText.SaveAsync(
+        var manifest = new
+        {
+            ProductionId = incoming.ProductionId,
+            SourceStoryUri = storyArtifact.Uri,
+            SourceSceneBreakdownUri = sceneBreakdownArtifact.Uri,
+            ComfyUiModel = _comfyUiOptions.Model,
+            Style = style,
+            Images = manifestItems
+        };
+
+        var manifestUri = await ArtifactJson.SaveAsync(
             artifactStore,
-            manifest.ToString(),
-            $"productions/{incoming.ProductionId}/02-illustrator/manifest.txt",
+            manifest,
+            $"productions/{incoming.ProductionId}/02-illustrator/image-manifest.json",
             context.CancellationToken);
 
         var manifestArtifact = new ArtifactReference(
             manifestUri,
-            "text/plain",
-            "Manifest describing scene images generated by the illustrator agent.");
+            "application/json",
+            "Image manifest describing scene images generated by the illustrator agent.");
 
         await productionRepository.RecordArtifactAsync(
             incoming.ProductionId,
@@ -138,6 +158,7 @@ public sealed partial class StoryCreatedConsumer(
         var outputArtifacts = imageArtifacts
             .OrderBy(image => image.Order)
             .Select(image => image.Artifact)
+            .Append(manifestArtifact)
             .ToArray();
 
         var payload = CommonPayload.Create(
@@ -146,6 +167,7 @@ public sealed partial class StoryCreatedConsumer(
             attributes: new Dictionary<string, string>(incoming.Payload.Attributes)
             {
                 ["manifestUri"] = manifestArtifact.Uri,
+                ["imageManifestUri"] = manifestArtifact.Uri,
                 ["imageCount"] = imageArtifacts.Count.ToString()
             },
             artifacts: outputArtifacts,
@@ -189,113 +211,42 @@ public sealed partial class StoryCreatedConsumer(
 
     private static ArtifactReference GetRequiredArtifact(
         EventEnvelope<CommonPayload> incoming,
-        string outputKey)
+        params string[] outputKeys)
     {
-        if (incoming.Payload.Attributes.TryGetValue(outputKey, out var uri) &&
-            !string.IsNullOrWhiteSpace(uri))
+        foreach (var outputKey in outputKeys)
         {
-            return incoming.Payload.Artifacts.FirstOrDefault(artifact => artifact.Uri == uri) ??
-                new ArtifactReference(uri, "application/octet-stream");
+            if (incoming.Payload.Attributes.TryGetValue(outputKey, out var uri) &&
+                !string.IsNullOrWhiteSpace(uri))
+            {
+                return incoming.Payload.Artifacts.FirstOrDefault(artifact => artifact.Uri == uri) ??
+                    new ArtifactReference(uri, "application/octet-stream");
+            }
         }
 
         return incoming.Payload.Artifacts.First();
     }
 
-    private static IReadOnlyList<SceneBrief> ExtractScenes(string manuscript, int maxScenes)
-    {
-        var sceneSectionIndex = manuscript.IndexOf("## 場景拆解", StringComparison.Ordinal);
-        var source = sceneSectionIndex >= 0 ? manuscript[sceneSectionIndex..] : manuscript;
-        var matches = SceneHeadingRegex().Matches(source);
-        var scenes = new List<SceneBrief>();
-
-        for (var index = 0; index < matches.Count; index++)
-        {
-            var match = matches[index];
-            var nextIndex = index + 1 < matches.Count
-                ? matches[index + 1].Index
-                : source.Length;
-            var body = source[match.Index..nextIndex].Trim();
-            var order = index + 1;
-            var title = CleanSceneTitle(match.Groups["title"].Value);
-
-            scenes.Add(new SceneBrief(
-                $"scene-{order:000}",
-                order,
-                string.IsNullOrWhiteSpace(title) ? $"場景 {order}" : title,
-                body));
-        }
-
-        if (scenes.Count == 0)
-        {
-            scenes.AddRange(FallbackScenes(manuscript));
-        }
-
-        var limit = Math.Clamp(maxScenes, 1, 12);
-        return scenes.Take(limit).ToArray();
-    }
-
-    private static IEnumerable<SceneBrief> FallbackScenes(string manuscript)
-    {
-        var storyIndex = manuscript.IndexOf("## 完整故事", StringComparison.Ordinal);
-        var source = storyIndex >= 0 ? manuscript[storyIndex..] : manuscript;
-        var paragraphs = source
-            .Split(["\r\n\r\n", "\n\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(paragraph => !paragraph.StartsWith('#') && !paragraph.StartsWith("【故事完】"))
-            .Take(3)
-            .ToArray();
-
-        for (var index = 0; index < paragraphs.Length; index++)
-        {
-            var order = index + 1;
-            yield return new SceneBrief(
-                $"scene-{order:000}",
-                order,
-                $"故事畫面 {order}",
-                paragraphs[index]);
-        }
-    }
-
-    private static string BuildImagePrompt(SceneBrief scene, string style)
+    private static string BuildImagePrompt(SceneBreakdownItem scene, string style)
     {
         return $"""
             Create one finished illustration for a story video scene.
             Visual style: {style}, Taiwanese picture-book sensibility, coherent character design, warm cinematic lighting, gentle watercolor texture, clean composition, no visible text.
             Scene id: {scene.SceneId}
             Scene title: {scene.Title}
-            Scene details:
-            {scene.Description}
+            Visual description: {scene.VisualDescription}
+            Character action: {scene.CharacterAction}
+            Mood and color: {scene.MoodAndColor}
+            Illustrator direction: {scene.IllustratorPrompt}
             Requirements: single frame, emotionally clear, consistent style across scenes, suitable as a key visual for animation.
             """;
     }
 
-    private static string? ExtractManuscriptValue(string manuscript, string key)
+    private static void EnsureValidSpec(ProductionSpecValidationResult validation)
     {
-        var match = Regex.Match(
-            manuscript,
-            $@"^{Regex.Escape(key)}:\s*(?<value>.+)$",
-            RegexOptions.Multiline);
-
-        return match.Success ? match.Groups["value"].Value.Trim() : null;
+        if (!validation.IsValid)
+        {
+            throw new InvalidOperationException(
+                $"Production spec preflight failed for {validation.Stage.AgentRole}: {string.Join("; ", validation.Errors)}");
+        }
     }
-
-    private static string CleanSceneTitle(string title)
-    {
-        var cleaned = SceneTitlePrefixRegex()
-            .Replace(title.Trim(), string.Empty, 1)
-            .Trim();
-
-        return string.IsNullOrWhiteSpace(cleaned) ? title.Trim() : cleaned;
-    }
-
-    [GeneratedRegex(@"(?m)^###\s*(?<title>.+)$")]
-    private static partial Regex SceneHeadingRegex();
-
-    [GeneratedRegex(@"^場\S*?[一二三四五六七八九十\d]+[：:\s-]*")]
-    private static partial Regex SceneTitlePrefixRegex();
-
-    private sealed record SceneBrief(
-        string SceneId,
-        int Order,
-        string Title,
-        string Description);
 }

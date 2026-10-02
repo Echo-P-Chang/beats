@@ -136,6 +136,25 @@ Azurite
 
 The `LocalLLM` branch also expects Ollama and ComfyUI to run as external host services if you want real local generation.
 
+### Optional Foundry Animator Auth
+
+On the `LocalLLM` branch, the Animator can call an Azure AI Foundry hosted agent. Use Microsoft Entra ID credentials for normal local runs instead of pasting a short-lived bearer token.
+
+Create a local `.env` file from `.env.example` and set these values:
+
+```text
+FOUNDRY_ANIMATOR_PROVIDER=Foundry
+FOUNDRY_ANIMATOR_PROJECT_ENDPOINT=
+FOUNDRY_ANIMATOR_AGENT_ID=
+FOUNDRY_ANIMATOR_AGENT_NAME=
+FOUNDRY_ANIMATOR_TOKEN_SCOPE=https://ai.azure.com/.default
+AZURE_TENANT_ID=
+AZURE_CLIENT_ID=
+AZURE_CLIENT_SECRET=
+```
+
+`.env` is ignored by git. Keep the client secret local or move it to your preferred secret manager for shared environments.
+
 ### Start The Demo
 
 From the repository root:
@@ -274,11 +293,16 @@ artifacts
 Common artifact paths:
 
 ```text
-productions/{productionId}/01-storyteller/manuscript.txt
-productions/{productionId}/02-illustrator/
-productions/{productionId}/03-animator/manuscript.txt
-productions/{productionId}/04-editor/manuscript.txt
-productions/{productionId}/05-reviewer/manuscript.txt
+productions/{productionId}/01-storyteller/story.txt
+productions/{productionId}/01-storyteller/scene-breakdown.json
+productions/{productionId}/01-storyteller/animation-plan.json
+productions/{productionId}/02-illustrator/scene-001.png
+productions/{productionId}/02-illustrator/image-manifest.json
+productions/{productionId}/03-animator/animation-report.txt
+productions/{productionId}/03-animator/animation-{productionIdWithoutDashes}.mp4
+productions/{productionId}/04-editor/final-video.mp4
+productions/{productionId}/04-editor/voiceover-script.txt
+productions/{productionId}/05-reviewer/review-report.txt
 ```
 
 List artifacts:
@@ -293,14 +317,14 @@ docker compose run --rm --no-deps storage-init \
     -o tsv'
 ```
 
-Download the final reviewer artifact:
+Download the final reviewer report:
 
 ```bash
 docker compose run --rm --no-deps -v "$PWD:/workspace" storage-init \
   sh -c 'az storage blob download \
     --container-name artifacts \
-    --name productions/{productionId}/05-reviewer/manuscript.txt \
-    --file /workspace/final-manuscript.txt \
+    --name productions/{productionId}/05-reviewer/review-report.txt \
+    --file /workspace/review-report.txt \
     --connection-string "$AZURE_STORAGE_CONNECTION_STRING" \
     --overwrite'
 ```
@@ -561,6 +585,25 @@ Azurite
 
 `LocalLLM` 分支若要進行真實本機生成，還需要主機上另外啟動 Ollama 與 ComfyUI。
 
+### 可選 Foundry Animator Auth
+
+在 `LocalLLM` 分支中，Animator 可以呼叫 Azure AI Foundry 上 hosted agent。正常本機執行時，建議使用 Microsoft Entra ID credential，不要貼短效 bearer token。
+
+請從 `.env.example` 建立本機 `.env`，並設定：
+
+```text
+FOUNDRY_ANIMATOR_PROVIDER=Foundry
+FOUNDRY_ANIMATOR_PROJECT_ENDPOINT=
+FOUNDRY_ANIMATOR_AGENT_ID=
+FOUNDRY_ANIMATOR_AGENT_NAME=
+FOUNDRY_ANIMATOR_TOKEN_SCOPE=https://ai.azure.com/.default
+AZURE_TENANT_ID=
+AZURE_CLIENT_ID=
+AZURE_CLIENT_SECRET=
+```
+
+`.env` 已被 git 忽略。client secret 請只留在本機；若是 shared environment，請改放到你選用的 secret manager。
+
 ### 啟動 Demo
 
 在 repo 根目錄執行：
@@ -699,11 +742,16 @@ artifacts
 常見 artifact paths：
 
 ```text
-productions/{productionId}/01-storyteller/manuscript.txt
-productions/{productionId}/02-illustrator/
-productions/{productionId}/03-animator/manuscript.txt
-productions/{productionId}/04-editor/manuscript.txt
-productions/{productionId}/05-reviewer/manuscript.txt
+productions/{productionId}/01-storyteller/story.txt
+productions/{productionId}/01-storyteller/scene-breakdown.json
+productions/{productionId}/01-storyteller/animation-plan.json
+productions/{productionId}/02-illustrator/scene-001.png
+productions/{productionId}/02-illustrator/image-manifest.json
+productions/{productionId}/03-animator/animation-report.txt
+productions/{productionId}/03-animator/animation-{productionIdWithoutDashes}.mp4
+productions/{productionId}/04-editor/final-video.mp4
+productions/{productionId}/04-editor/voiceover-script.txt
+productions/{productionId}/05-reviewer/review-report.txt
 ```
 
 列出 artifacts：
@@ -718,14 +766,14 @@ docker compose run --rm --no-deps storage-init \
     -o tsv'
 ```
 
-下載 reviewer 最終 artifact：
+下載 reviewer 最終報告：
 
 ```bash
 docker compose run --rm --no-deps -v "$PWD:/workspace" storage-init \
   sh -c 'az storage blob download \
     --container-name artifacts \
-    --name productions/{productionId}/05-reviewer/manuscript.txt \
-    --file /workspace/final-manuscript.txt \
+    --name productions/{productionId}/05-reviewer/review-report.txt \
+    --file /workspace/review-report.txt \
     --connection-string "$AZURE_STORAGE_CONNECTION_STRING" \
     --overwrite'
 ```

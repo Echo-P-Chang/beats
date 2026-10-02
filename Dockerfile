@@ -17,9 +17,14 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
 ARG APP_DLL
+ARG INSTALL_FFMPEG=false
 ENV APP_DLL=$APP_DLL
 ENV DOTNET_ENVIRONMENT=Production
 ENV ASPNETCORE_ENVIRONMENT=Production
+
+RUN apt-get update \
+    && if [ "$INSTALL_FFMPEG" = "true" ]; then apt-get install -y --no-install-recommends ffmpeg; fi \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/publish ./
 

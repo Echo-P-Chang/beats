@@ -2,6 +2,7 @@ using Beats.Production.Middleware.Ai;
 using Beats.Production.Middleware.Artifacts;
 using Beats.Production.Middleware.Eventing;
 using Beats.Production.Middleware.Persistence;
+using Beats.Production.Middleware.Specifications;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +36,8 @@ public static class ProductionMiddlewareServiceCollectionExtensions
         }
 
         services.AddSingleton<IArtifactStore, LocalFileArtifactStore>();
+        services.AddSingleton<IProductionSpecStore, ProductionSpecStore>();
+        services.AddSingleton<IProductionSpecValidator, ProductionSpecValidator>();
         services.AddSingleton<IEventPublisher, LoggingEventPublisher>();
 
         return services;
@@ -57,6 +60,8 @@ public static class ProductionMiddlewareServiceCollectionExtensions
         });
 
         services.AddSingleton<IArtifactStore, AzureBlobArtifactStore>();
+        services.AddSingleton<IProductionSpecStore, ProductionSpecStore>();
+        services.AddSingleton<IProductionSpecValidator, ProductionSpecValidator>();
 
         return services;
     }

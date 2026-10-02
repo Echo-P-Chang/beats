@@ -1,16 +1,19 @@
 using Beats.Production.Contracts;
 using Beats.Production.Contracts.Events;
 using Beats.Production.Contracts.Events.Payloads;
+using Beats.Production.Contracts.Media;
 using Beats.Production.Flows;
 using Beats.Production.Flows.DependencyInjection;
 using Beats.Production.Flows.FlowConfiguration;
 using Beats.Production.Contracts.Productions;
+using Beats.Production.Contracts.Specifications;
 using Beats.Production.Middleware.Ai;
 using Beats.Production.Middleware.Artifacts;
 using Beats.Production.Middleware.Configuration;
 using Beats.Production.Middleware.DependencyInjection;
 using Beats.Production.Middleware.Eventing;
 using Beats.Production.Middleware.Persistence;
+using Beats.Production.Middleware.Specifications;
 using Microsoft.Extensions.Options;
 
 LocalEnvFile.Load();
@@ -108,6 +111,7 @@ app.MapPost("/productions", async (
     StartProductionRequest request,
     IEventPublisher eventPublisher,
     IProductionFlow productionFlow,
+    IProductionSpecStore productionSpecStore,
     IProductionRepository productionRepository,
     CancellationToken cancellationToken) =>
 {
@@ -117,11 +121,23 @@ app.MapPost("/productions", async (
     }
 
     var productionId = Guid.NewGuid();
+    var productionSpec = CreateProductionSpec(productionId, request);
+    var specUri = await productionSpecStore.SaveAsync(
+        productionSpec,
+        $"productions/{productionId}/00-spec/production-spec.json",
+        cancellationToken);
+    var specArtifact = new ArtifactReference(
+        specUri,
+        "application/json",
+        "Production requirement spec used by each agent for preflight validation.");
+
     var payload = CommonPayload.Create(
         EventTypes.ProductionRequested,
         AgentRoles.ProductionApi,
         attributes: new Dictionary<string, string>
         {
+            ["specUri"] = specUri,
+            ["specVersion"] = productionSpec.SpecVersion.ToString(),
             ["prompt"] = request.Prompt,
             ["style"] = request.Style ?? string.Empty,
             ["targetWordCount"] = request.TargetWordCount.ToString(),
@@ -144,6 +160,12 @@ app.MapPost("/productions", async (
         request.TargetWordCount,
         request.DurationSeconds,
         ProductionStatus.Requested.ToString(),
+        cancellationToken);
+
+    await productionRepository.RecordArtifactAsync(
+        productionId,
+        AgentRoles.ProductionApi,
+        specArtifact,
         cancellationToken);
 
     await productionRepository.RecordEventAsync(message, cancellationToken);
@@ -290,6 +312,115 @@ app.MapMethods("/productions/{productionId:guid}/{*artifactPath}", new[] { HttpM
 .WithName("GetProductionArtifact");
 
 app.Run();
+
+static ProductionSpec CreateProductionSpec(
+    Guid productionId,
+    StartProductionRequest request)
+{
+    return new ProductionSpec(
+        productionId,
+        SpecVersion: 1,
+        request.Prompt,
+        request.Style,
+        request.TargetWordCount,
+        request.DurationSeconds,
+        DateTimeOffset.UtcNow,
+        [
+            new StageSpec(
+                AgentRoles.Storyteller,
+                EventTypes.ProductionRequested,
+                EventTypes.StoryCreated,
+                RequiredAttributes: ["specUri", "prompt", "targetWordCount"],
+                RequiredArtifactAttributes: [],
+                RequiredArtifactMediaTypes: [],
+                Requirements: new Dictionary<string, string>
+                {
+                    ["language"] = "Taiwan Traditional Chinese",
+                    ["storyLength"] = $"About {request.TargetWordCount} words",
+                    ["sceneBreakdown"] = "Exactly 3 scenes with visual and animation guidance"
+                },
+                AcceptanceCriteria:
+                [
+                    "Story has a complete beginning, middle, and ending.",
+                    "Scene breakdown is present and complete.",
+                    "Story artifact URI is published as storyUri.",
+                    "Scene breakdown JSON is published as sceneBreakdownUri.",
+                    "Animation plan JSON is published as animationPlanUri."
+                ]),
+            new StageSpec(
+                AgentRoles.Illustrator,
+                EventTypes.StoryCreated,
+                EventTypes.SceneImagesCreated,
+                RequiredAttributes: ["specUri", "storyUri", "sceneBreakdownUri", "animationPlanUri"],
+                RequiredArtifactAttributes: ["storyUri", "sceneBreakdownUri", "animationPlanUri"],
+                RequiredArtifactMediaTypes: ["text/plain", "application/json"],
+                Requirements: new Dictionary<string, string>
+                {
+                    ["style"] = request.Style ?? "watercolor storybook",
+                    ["consistency"] = "All scene images must use the same visual style",
+                    ["coverage"] = "Create one image for each scene"
+                },
+                AcceptanceCriteria:
+                [
+                    "Every scene has an image artifact.",
+                    "Scene image artifact media types are image/*.",
+                    "Image manifest JSON is published as imageManifestUri.",
+                    "SceneImagesCreated includes imageCount."
+                ]),
+            new StageSpec(
+                AgentRoles.Animator,
+                EventTypes.SceneImagesCreated,
+                EventTypes.SceneAnimationsCreated,
+                RequiredAttributes: ["specUri", "sceneBreakdownUri", "animationPlanUri", "imageManifestUri", "imageCount"],
+                RequiredArtifactAttributes: ["imageManifestUri"],
+                RequiredArtifactMediaTypes: ["image/*"],
+                Requirements: new Dictionary<string, string>
+                {
+                    ["motion"] = "Use the Storyteller scene breakdown and animation plan with the generated scene images",
+                    ["duration"] = request.DurationSeconds?.ToString() ?? "not specified",
+                    ["output"] = "Publish an animator execution report and, when available, a video artifact"
+                },
+                AcceptanceCriteria:
+                [
+                    "Animator execution report is published as animationReportUri.",
+                    "animationCount is published.",
+                    "Generated video artifact is written back to the local artifact store when available."
+                ]),
+            new StageSpec(
+                AgentRoles.Editor,
+                EventTypes.SceneAnimationsCreated,
+                EventTypes.FinalVideoCreated,
+                RequiredAttributes: ["specUri", "animationReportUri", "animationCount"],
+                RequiredArtifactAttributes: ["animationReportUri"],
+                RequiredArtifactMediaTypes: ["text/plain"],
+                Requirements: new Dictionary<string, string>
+                {
+                    ["editing"] = "Assemble generated animation video when available, otherwise publish a final cut plan",
+                    ["voiceover"] = "Prepare narration direction that matches story beats"
+                },
+                AcceptanceCriteria:
+                [
+                    "Final video or final manuscript artifact is published as videoUri.",
+                    "Voiceover artifact URI is published as voiceOverUri."
+                ]),
+            new StageSpec(
+                AgentRoles.Reviewer,
+                EventTypes.FinalVideoCreated,
+                EventTypes.ReviewPassed,
+                RequiredAttributes: ["specUri", "videoUri"],
+                RequiredArtifactAttributes: ["videoUri"],
+                RequiredArtifactMediaTypes: [],
+                Requirements: new Dictionary<string, string>
+                {
+                    ["qualityGate"] = "Confirm required outputs exist and match the production spec"
+                },
+                AcceptanceCriteria:
+                [
+                    "Review report artifact is published as reviewReportUri.",
+                    "reviewPassed is true when the quality gate passes."
+                ])
+        ]);
+}
 
 static string? NormalizeArtifactPath(string artifactPath)
 {
