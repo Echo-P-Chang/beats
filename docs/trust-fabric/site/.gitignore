@@ -3,6 +3,7 @@ obj/
 node_modules/
 wwwroot/content/
 wwwroot/vendor/
+wwwroot/assets/
 publish/
 publish-*/
 trust-fabric.zip

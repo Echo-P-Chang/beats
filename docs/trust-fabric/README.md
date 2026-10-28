@@ -240,6 +240,10 @@ Requirements:
 
 ## 6. Architecture Components
 
+![Interactive layered walkthrough of the AI Trust Fabric architecture components](assets/trust-fabric-components.svg)
+
+The interactive walkthrough presents nine manual steps: register the use case, enforce each trust boundary, decide policy, bind human approval and release evidence, then preserve the resulting audit trail. Use Previous, Next step, a numbered step, or a component in the diagram to navigate.
+
 ### 6.1 AI Application Registry
 
 The registry is the system of record for governed AI use cases.

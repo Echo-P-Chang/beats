@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const siteDirectory = resolve(scriptDirectory, "..");
 const vendorDirectory = resolve(siteDirectory, "wwwroot/vendor");
+const assetsDirectory = resolve(siteDirectory, "wwwroot/assets");
 
 await rm(vendorDirectory, { recursive: true, force: true });
+await rm(assetsDirectory, { recursive: true, force: true });
 await mkdir(vendorDirectory, { recursive: true });
 await mkdir(resolve(vendorDirectory, "marked"), { recursive: true });
 await mkdir(resolve(vendorDirectory, "mermaid/chunks"), { recursive: true });
@@ -50,6 +52,12 @@ await cp(
 await cp(
   resolve(siteDirectory, "../README.zh-TW.md"),
   resolve(siteDirectory, "wwwroot/content/README.zh-TW.md")
+);
+
+await cp(
+  resolve(siteDirectory, "../assets"),
+  assetsDirectory,
+  { recursive: true }
 );
 
 console.log("Client assets and Markdown content are ready.");

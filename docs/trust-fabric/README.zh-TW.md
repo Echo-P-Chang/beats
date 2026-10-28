@@ -240,6 +240,10 @@ flowchart TB
 
 ## 6. 架構元件
 
+![AI Trust Fabric 架構元件互動式分層導覽](assets/trust-fabric-components.svg)
+
+互動式導覽將第六章拆成九個手動步驟：先登錄 AI 使用情境，再攔截每個信任邊界，執行政策決策、綁定人工核准與 release evidence，最後保存完整 audit trail。可以使用上一步、下一步、步驟編號或直接點選圖中的元件切換。
+
 ### 6.1 AI Application Registry
 
 Registry 是受治理 AI use case 的 system of record，保存：
