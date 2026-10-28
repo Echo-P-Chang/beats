@@ -1,0 +1,8 @@
+bin/
+obj/
+node_modules/
+wwwroot/content/
+wwwroot/vendor/
+publish/
+publish-*/
+trust-fabric.zip

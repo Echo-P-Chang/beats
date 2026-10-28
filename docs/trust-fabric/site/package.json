@@ -1,0 +1,13 @@
+{
+  "name": "trust-fabric-docs",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:assets": "node scripts/build-assets.mjs"
+  },
+  "dependencies": {
+    "marked": "18.1.2",
+    "mermaid": "12.2.0"
+  }
+}
